@@ -30,14 +30,12 @@ pub enum Expr {
     str(String),
     Comma
 
- // Например: Expr + Expr
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Int(String,Expr),
     Float(String,Expr),
- // var <имя> = <выражение>
  Str(String,Expr),
  ReturnStmt(Expr),
  Func(Func),
@@ -170,13 +168,6 @@ impl Parser {
             &self.tokens[self.pos -1]
     }
 
-    // fn get_func(&self,name: &str)->Func{
-    //     for func in self.func_names{
-    //         if func.name == name{
-                
-    //         }
-    //     }
-    // }
 fn parse(&mut self)->Vec<Stmt>{
     let mut statements = Vec::new();
 
@@ -235,26 +226,6 @@ fn parse(&mut self)->Vec<Stmt>{
                        }
                                        }
 
-
-                                    //    if token_args_vec.len() == 0{
-                                        
-
-                                    // //    }
-                                    // if !token_args_vec.is_empty() && token_args_vec[0] == Token::Comma{
-                                    //     panic!("sdsdsd")
-                                    // }
-                                    // for (i,token) in token_args_vec.iter().enumerate(){
-                                    
-                                    //     if *token != Token::Comma{
-
-
-                                    //         args.push(self.parse_expr_token(token.clone()));
-                                    //     }else{
-
-                                    //         args.push(Expr::Comma);
-                                    //     }
-                                    // }
-                 
 
 
 
