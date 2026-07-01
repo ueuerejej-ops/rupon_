@@ -1,13 +1,13 @@
 My Language Experimental Compiler Project
 Idea of the language
 
-The main goal is not just to create another programming language but to learn and experiment with compiler design
+The main goal is not just to make another language, but to learn and experiment with compiler design
 
-Later I want to explore ideas like
+Later I want to try ideas like
 
-different memory management models
-greater control over how data is stored
-flexible language design
+Different memory management models
+More control over how data is stored
+Flexible language design
 Examples
 Hello world style
 func main() {
@@ -41,7 +41,7 @@ Contributing
 
 This project is still very early in development and I am currently working on it alone
 
-I would appreciate help and feedback from other people
+I would really appreciate help and feedback from other people
 
 If you want to contribute you can
 
@@ -71,6 +71,7 @@ If you want to contribute
 open an Issue on GitHub
 discuss ideas in comments
 suggest improvements to the compiler design
+
 Contact
 
-Discord https discord gg XXRqJuJe2k
+Discord https://discord.gg/XXRqJuJe2k
