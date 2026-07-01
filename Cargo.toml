@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 inkwell = { version = "0.4.0", features = ["llvm15-0"] }
 llvm-sys = { version = "150.2.1", features = ["prefer-dynamic"] }
-fxhash = "0.2.1" # 🔥 Добавляем быстрый хэшер
+fxhash = "0.2.1" 
