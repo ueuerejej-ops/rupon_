@@ -35,7 +35,7 @@ use crate::code::Stmt;
 use crate::varaibeldata::Int;
 #[derive(Debug, Clone)]
 enum varaibeldata<'ctx>{
-  Float(inkwell::values::PointerValue<'ctx>), // Для f64
+  Float(inkwell::values::PointerValue<'ctx>), 
   Int(inkwell::values::PointerValue<'ctx>)
 }
 impl StringInterner {
@@ -59,7 +59,7 @@ impl StringInterner {
 }
 struct StringInterner {
     strings: Vec<String>,
-    map: FxHashMap<String, usize>, // Быстрый поиск: Строка -> ID
+    map: FxHashMap<String, usize>, 
 }
 
 struct SymbolHash<'ctx>{
@@ -93,7 +93,7 @@ fn func_call(&self,func: FunctionValue<'ctx>,name: &str,args: Option<Vec<InitVal
                vec_of_return.push(InitValue::Int(basic_val.into_int_value()));
                Some(vec_of_return)
             } else {
-                None // Если это какой-то другой тип
+                None 
             }
         } else {
             None
@@ -187,13 +187,7 @@ let mut compiler = Compiler::new(&context, "arm_module");
 
 let mut varaebale: Vec<Stmt> =   ready_code(code_my);
 
-// let start = Instant::now();
-// for n in 0..1000000 {
-//     // Создаем имена: i0, i1, i2 ... i9999
-//     let name = format!("i{}", n); 
-//     // Каждой присваиваем значение 10
-//     varaebale.push(Stmt::Int(name, code::Expr::Num(10)));
-// }
+
 
 
 
@@ -206,31 +200,11 @@ for  var in varaebale{
     
     }
 
-    //  Stmt::ReturnStmt(return)
     _ => panic!("ERRR")
   }
 }
 
-// let fn_type2  = context.i64_type().fn_type(&[int_type.into()], false);
-// let func = compiler.module.add_function("add_10", fn_type2,None);
-// let entry2 = context.append_basic_block(func, "entry2");
-// compiler.builder.position_at_end(entry2);
-// let args = func.get_nth_param(0).unwrap().into_int_value();
-//  let int_10 = int_type.const_int(10, false);
-//  let sum  = compiler.builder.build_int_add(int_10,args,"heldoi").unwrap();
-// compiler.builder.build_return(Some(&sum)).unwrap();
-// let mut vec:Vec<varaibeldata> = Vec::new();
-// vec.push(varaibeldata::Int(int_10));
-// let res = compiler.func_call(func, "add", Some(vec)).unwrap();
 
-// println!("{:?}",res);
-
-// ⏱️ СТОП ТАЙМЕРА (сразу как LLVM всё построил)
-    // let duration = start.elapsed();
-
-    // println!("--------------------------------------");
-    // println!("Время генерации LLVM: {:?}", duration);
-    // println!("--------------------------------------");
 
     let ten  = int_type.const_int(10,false);
     compiler.create_var("das", InitValue::Int(ten));
