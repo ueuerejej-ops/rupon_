@@ -1,6 +1,3 @@
-# rupon_
-
-
 My Language Experimental Compiler Project
 Idea of the language
 
@@ -51,7 +48,7 @@ If you want to contribute you can
 suggest ideas for language design
 help improve parsing or LLVM generation
 propose new features
-give feedback on syntax and structure
+give feedback about syntax and structure
 
 Even small feedback is helpful this is a learning project
 
