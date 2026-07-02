@@ -298,7 +298,7 @@ fn parse(&mut self)->Vec<Stmt>{
 
         Stmt::Func_call(Func_call { name: name, args })
      }
-            _ => panic!("Ошибка парсинга: Неизвестная инструкция {:?}", self.current()),
+            _ => panic!("error{:?}", self.current()),
         }
     }
     fn parse_expr(&mut self)->Expr{
