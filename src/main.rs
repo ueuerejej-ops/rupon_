@@ -354,7 +354,7 @@ impl Parser {
                 Stmt::Func_call(Func_call { name: name, args })
             }
             _ => panic!(
-                "Ошибка парсинга: Неизвестная инструкция {:?}",
+                "error {:?}",
                 self.current()
             ),
         }
