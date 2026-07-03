@@ -270,6 +270,25 @@ impl Parser {
 
         Stmt::Int(name, expr)
     }
+    fn parse_func_call(&mut self) -> Stmt {
+
+        let mut args: Vec<Expr> = Vec::new();
+
+        let name = match self.advance().clone() {
+            Token::Identifier(name) => name,
+            _ => panic!("Expected identifier"),
+        };
+
+self.advance();
+      while *self.current() != Token::Rparen {
+            if *self.current() == Token::Comma {
+                self.advance();
+            }
+            args.push(self.parse_expr());
+        }
+self.advance();
+        Stmt::Func_call(Func_call { name, args })
+    }
     fn parse_func(&mut self) -> Stmt {
         self.advance();
 
@@ -288,7 +307,7 @@ impl Parser {
             if let typee = self.parse_func_args() {
                 let name = match self.advance().clone() {
                     Token::Identifier(name) => name,
-                    _ => panic!("dms.d;/,sdml"),
+                    _ => panic!("Expected identifier"),
                 };
                 args.push(Param { name, ty: typee });
             };
@@ -300,7 +319,7 @@ impl Parser {
 
         self.advance();
         if *self.advance() != Token::Lcurly {
-            panic!("Expected ")
+            panic!("Expected Lcurly ")
         }
         while *self.current() != Token::Rcurly {
             code_token.push(self.current().clone());
@@ -325,7 +344,7 @@ impl Parser {
             Token::Int => Type::Int,
             Token::Str => Type::Str,
 
-            _ => panic!("s"),
+            _ => panic!("Expected type "),
         }
     }
     fn parse_str(&mut self) -> Stmt {
@@ -348,12 +367,22 @@ impl Parser {
             panic!("Expected string");
         }
     }
+    fn next(&mut self)->&Token{
+        &self.tokens[self.pos+1]
+    }
     fn parse_statement(&mut self) -> Stmt {
         match self.current().clone() {
             Token::Int => self.parse_int(),
             Token::Str => self.parse_str(),
             Token::Return => self.parse_return(),
             Token::Func => self.parse_func(),
+            Token::Identifier(name)=>{
+                if *self.next()  == Token::Lparen{
+                    self.parse_func_call()
+                }else{
+                panic!("sas")
+                }
+            }
 
             _ => {
                 let expr = self.parse_expr();
@@ -435,7 +464,7 @@ pub fn ready_code(code: &str) -> Vec<Stmt> {
     ast
 }
 fn main() {
-    let my_code = r#"func hello(int i,str he){int i = 23}"#;
+    let my_code = r#"func hello(){hello(heh)} hh("hello",323) "#;
     let tokens = tokenize(my_code);
     println!("{:?}", tokens.clone());
 
