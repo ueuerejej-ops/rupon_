@@ -1,4 +1,6 @@
 use core::panic;
+
+use inkwell::values::BasicMetadataValueEnum::VectorValue;
 use std::any::Any;
 use std::collections::HashMap;
 use std::env::VarError;
@@ -7,9 +9,18 @@ use std::num::NonZero;
 use std::os::unix::process::parent_id;
 use std::vec;
 
-use inkwell::values::BasicMetadataValueEnum::VectorValue;
-
 #[derive(Debug, Clone)]
+struct Param {
+    name: String,
+    ty: Type,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum Type {
+    Int,
+    Str,
+}
+#[derive(Debug, PartialEq, Clone)]
 enum BinaryOp {
     Add,
     Sub,
@@ -18,7 +29,7 @@ enum BinaryOp {
 }
 #[derive(Debug, Clone)]
 pub struct Func {
-    args: Vec<Expr>,
+    args: Vec<Param>,
     code: Vec<Stmt>,
     name: String,
 }
@@ -27,13 +38,12 @@ pub struct Func_call {
     name: String,
     args: Vec<Expr>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Num(i64),
     Id(String),
     Float(f64),
-    str(String),
-    Plus,
+    Str(String),
     Comma,
 
     Binary {
@@ -53,7 +63,7 @@ pub enum Stmt {
     Func(Func),
     Func_call(Func_call),
     Binary(Expr),
-    Plus(Expr),
+    Expr(Expr),
 }
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
@@ -72,6 +82,7 @@ enum Token {
     Sub,
     Mul,
     Div,
+    Semicolon,
 
     Identifier(String),
     Number(i64),
@@ -103,8 +114,9 @@ fn tokenize(code: &str) -> Vec<Token> {
                 i += 1;
                 continue;
             }
+
             '+' => {
-                tokens.push(Token::Plus);
+                tokens.push(Token::Add);
                 i += 1;
                 continue;
             }
@@ -224,181 +236,194 @@ impl Parser {
         &self.tokens[self.pos - 1]
     }
 
-
     fn previous(&self) -> &Token {
         &self.tokens[self.pos - 1]
     }
     fn parse(&mut self) -> Vec<Stmt> {
         let mut statements = Vec::new();
-
         while *self.current() != Token::EOF {
             statements.push(self.parse_statement());
         }
 
         statements
     }
-    fn parse_statement(&mut self) -> Stmt {
-        let token = self.current().clone();
-        match token {
-            Token::Int => {
+
+    fn parse_return(&mut self) -> Stmt {
+        self.advance();
+        let expr = self.parse_primary();
+
+        Stmt::ReturnStmt(expr)
+    }
+    fn parse_int(&mut self) -> Stmt {
+        self.advance();
+
+        let name = match self.advance().clone() {
+            Token::Identifier(name) => name,
+            _ => panic!("Expected identifier"),
+        };
+
+        if *self.advance() != Token::Assign {
+            panic!("Expected '='");
+        }
+
+        let expr = self.parse_expr();
+
+        Stmt::Int(name, expr)
+    }
+    fn parse_func(&mut self) -> Stmt {
+        self.advance();
+
+        let mut args: Vec<Param> = Vec::new();
+        let mut code_token: Vec<Token> = Vec::new();
+        let name = match self.advance().clone() {
+            Token::Identifier(name) => name,
+            _ => panic!("Expected identifier"),
+        };
+
+        if *self.advance() != Token::Lparen {
+            panic!("Expected '('")
+        }
+
+        while *self.current() != Token::Rparen {
+            if let typee = self.parse_func_args() {
+                let name = match self.advance().clone() {
+                    Token::Identifier(name) => name,
+                    _ => panic!("dms.d;/,sdml"),
+                };
+                args.push(Param { name, ty: typee });
+            };
+
+            if *self.current() == Token::Comma {
                 self.advance();
-
-                if let Token::Identifier(name) = self.advance().clone() {
-                    if *self.advance() == Token::Assign {
-                        let expr = self.parse_expr();
-                        Stmt::Int(name, expr)
-                    } else {
-                        panic!("error");
-                    }
-                } else {
-                    panic!("error");
-                }
             }
+        }
 
-            Token::Return => {
-                self.advance();
-                let expr = self.parse_expr();
+        self.advance();
+        if *self.advance() != Token::Lcurly {
+            panic!("Expected ")
+        }
+        while *self.current() != Token::Rcurly {
+            code_token.push(self.current().clone());
+            self.advance();
+        }
 
-                self.tokens.push(Token::EOF);
-                Stmt::ReturnStmt(expr)
-            }
-            Token::Number(num) => {
-                let expr = self.parse_expr();
+        self.advance();
+        code_token.push(Token::EOF);
 
-                Stmt::Binary(expr)
-            }
+        let mut parser = Parser::new(code_token.clone());
 
-            Token::Func => {
-                self.advance();
+        println!("{:?}", code_token.clone());
+        Stmt::Func(Func {
+            args,
+            code: parser.parse(),
+            name,
+        })
+    }
 
-                let mut token_args_vec: Vec<Expr> = Vec::new();
-                if let Token::Identifier(name) = self.advance().clone() {
-                    let mut args: Vec<Expr> = Vec::new();
-                    if *self.advance() == Token::Lparen {
-                        while *self.current() != Token::Rparen {
-                            token_args_vec.push(self.parse_expr_for_binary());
+    fn parse_func_args(&mut self) -> Type {
+        match self.advance().clone() {
+            Token::Int => Type::Int,
+            Token::Str => Type::Str,
 
-                            if *self.current() == Token::Comma {
-                                self.advance();
-                            }
-                        }
-
-                
-                    } else {
-                        panic!("sdf")
-                    }
-
-                    self.advance();
-                    if *self.current() == Token::Lcurly {
-                        self.advance();
-                        let mut vec_token: Vec<Token> = Vec::new();
-
-                        let mut code: Vec<Stmt> = Vec::new();
-                        while *self.current() != Token::Rcurly {
-                            vec_token.push(self.current().clone());
-                            self.advance();
-                        }
-                        self.advance();
-                        println!("{:?}", vec_token);
-                        vec_token.push(Token::EOF);
-                        let mut parser: Parser = Parser::new(vec_token);
-                        Stmt::Func(Func {
-                            args: token_args_vec,
-                            code: parser.parse(),
-                            name,
-                        })
-                    } else {
-                        panic!("sas")
-                    }
-                } else {
-                    panic!("assdzd")
-                }
-            }
-
-            Token::Plus => {
-                let expr = self.parse_expr_for_binary();
-
-                Stmt::Plus(expr)
-            }
-
-            Token::Str => {
-                self.advance();
-                if let Token::Identifier(name) = self.advance().clone() {
-                    if *self.advance() == Token::Assign {
-                        let expr = self.parse_expr();
-                        Stmt::Str(name, expr)
-                    } else {
-                        panic!("SD")
-                    }
-                } else {
-                    panic!("sd")
-                }
-            }
-
-            Token::Identifier(name) => {
-                if *self.advance() != Token::Lparen {
-                    return Stmt::Var(name);
-                }
-                self.advance();
-
-                self.advance();
-                let mut args: Vec<Expr> = Vec::new();
-                while *self.current() != Token::Rparen {
-                    args.push(self.parse_expr());
-                    if *self.current() == Token::Comma {
-                        self.advance();
-                    }
-                }
-                self.advance();
-
-                Stmt::Func_call(Func_call { name: name, args })
-            }
-            _ => panic!(
-                "error {:?}",
-                self.current()
-            ),
+            _ => panic!("s"),
         }
     }
-    fn parse_expr(&mut self) -> Expr {
+    fn parse_str(&mut self) -> Stmt {
+        self.advance();
+
+        let name = match self.advance().clone() {
+            Token::Identifier(name) => name,
+            _ => panic!("Expected identifier"),
+        };
+
+        if *self.advance() != Token::Assign {
+            panic!("Expected '='");
+        }
+
+        let expr = self.parse_primary();
+
+        if let Expr::Str(_) = &expr {
+            Stmt::Str(name, expr)
+        } else {
+            panic!("Expected string");
+        }
+    }
+    fn parse_statement(&mut self) -> Stmt {
+        match self.current().clone() {
+            Token::Int => self.parse_int(),
+            Token::Str => self.parse_str(),
+            Token::Return => self.parse_return(),
+            Token::Func => self.parse_func(),
+
+            _ => {
+                let expr = self.parse_expr();
+                Stmt::Expr(expr)
+            }
+        }
+    }
+    fn parse_exp3r(&mut self) -> Expr {
         let left = match self.advance().clone() {
             Token::Number(val) => Expr::Num(val),
             Token::Identifier(name) => Expr::Id(name),
-            Token::String(str) => Expr::str(str),
+            Token::String(str) => Expr::Str(str),
             _ => panic!("error{:?}", self.current()),
         };
 
+        left
+    }
+    fn parse_primary(&mut self) -> Expr {
+        let token = self.advance().clone();
+        match token {
+            Token::Number(val) => Expr::Num(val),
+            Token::Identifier(name) => Expr::Id(name),
+            Token::String(str) => Expr::Str(str),
+            _ => panic!("error{:?}", token),
+        }
+    }
+
+    fn parse_expr(&mut self) -> Expr {
+        let mut left = self.parse_term();
+        while matches!(self.current(), Token::Mines | Token::Add) {
+            let op = match self.advance() {
+                Token::Add => BinaryOp::Add,
+                Token::Mines => BinaryOp::Sub,
+                _ => unreachable!(),
+            };
+
+            let right = self.parse_term();
+
+            left = Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            }
+        }
+        left
+    }
+    fn parse_term(&mut self) -> Expr {
+        let mut left = self.parse_primary();
+
+        while matches!(self.current(), Token::Mul | Token::Div) {
+            let op = match self.advance() {
+                Token::Mul => BinaryOp::Mul,
+                Token::Div => BinaryOp::Div,
+                _ => unreachable!(),
+            };
+
+            let right = self.parse_primary();
+
+            left = Expr::Binary {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
+        }
         left
     }
     fn back(&mut self) {
         if self.pos > 0 {
             self.pos -= 1;
         }
-    }
-    fn BinaryOp(&mut self) -> BinaryOp {
-        match *self.current() {
-            Token::Plus => BinaryOp::Add,
-            Token::Div => BinaryOp::Div,
-            Token::Mul => BinaryOp::Mul,
-            Token::Sub => BinaryOp::Sub,
-            _ => panic!("error"),
-        }
-    }
-    fn parse_expr_for_binary(&mut self) -> Expr {
-        self.back();
-        let left = self.parse_expr();
-
-        if *self.current() == Token::Plus {
-            self.advance();
-            let right = self.parse_expr();
-
-            return Expr::Binary {
-                left: Box::new(left),
-                op: BinaryOp::Add,
-                right: Box::new(right),
-            };
-        }
-
-        left
     }
 }
 pub fn ready_code(code: &str) -> Vec<Stmt> {
@@ -410,18 +435,14 @@ pub fn ready_code(code: &str) -> Vec<Stmt> {
     ast
 }
 fn main() {
-    let my_code = r#"func yhello(){ i + 12 + hello +233223}"#;
+    let my_code = r#"func hello(int i,str he){int i = 23}"#;
     let tokens = tokenize(my_code);
-    println!("{}", my_code);
+    println!("{:?}", tokens.clone());
 
-    let code2 = r#"func hewllo(){i}"#;
-    let tokens2 = tokenize(code2);
-    println!("{:?}", tokens2);
-    println!("{:?}", tokens);
     let mut parser = Parser::new(tokens.clone());
-    let mut parser2 = Parser::new(tokens2.clone());
     let emc = parser.parse();
-    let emc2 = parser2.parse();
     println!("{:?}", emc);
+    println!("{:?}", parser.parse());
 }
+
 
