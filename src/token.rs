@@ -1,6 +1,6 @@
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Token {
+#[derive(Debug, PartialEq, Clone,Copy)]
+pub enum Token<'a> {
     Call,
     Func,
     Return,
@@ -15,117 +15,120 @@ pub enum Token {
     Mul,
     Div,
 
-    Identifier(String),
+    Identifier(&'a str),
     Number(i64),
-    String(String),
+    String(&'a str),
     Int,
     Str,
 
     EOF,
 }
-pub fn tokenize(code: &str) -> Vec<Token> {
+pub fn tokenize<'a>(code: &str) -> Vec<Token<>> {
     let mut tokens: Vec<Token> = Vec::new();
 
-    let chars: Vec<char> = code.chars().collect();
+    let bytes = code.as_bytes();
 
     let mut i = 0;
 
-    while i < chars.len() {
-        let ch: char = chars[i];
-        if ch.is_whitespace() {
+    while i < bytes.len()  {
+        if bytes[i].is_ascii_whitespace() {
             i += 1;
             continue;
         }
 
-        match ch {
-            '=' => {
-                tokens.push(Token::Assign);
-                i += 1;
-                continue;
-            }
+   match bytes[i] {
+    b'=' => {
+        tokens.push(Token::Assign);
+        i += 1;
+        continue;
+    }
 
-            '+' => {
-                tokens.push(Token::Add);
-                i += 1;
-                continue;
-            }
-            '-' => {
-                tokens.push(Token::Mines);
-                i += 1;
-                continue;
-            }
-            '*' => {
-                tokens.push(Token::Mul);
-                i += 1;
-                continue;
-            }
-            '/' => {
-                tokens.push(Token::Div);
-                i += 1;
-                continue;
-            }
-            ')' => {
-                tokens.push(Token::Rparen);
-                i += 1;
-                continue;
-            }
-            '}' => {
-                tokens.push(Token::Rcurly);
-                i += 1;
-                continue;
-            }
-            ',' => {
-                tokens.push(Token::Comma);
-                i += 1;
-                continue;
-            }
-            '{' => {
-                tokens.push(Token::Lcurly);
-                i += 1;
-                continue;
-            }
-            '(' => {
-                tokens.push(Token::Lparen);
-                i += 1;
-                continue;
-            }
-            _ => {}
-        }
+    b'+' => {
+        tokens.push(Token::Add);
+        i += 1;
+        continue;
+    }
 
-        if ch.is_ascii_digit() {
-            let mut num_str = String::new();
+    b'-' => {
+        tokens.push(Token::Mines);
+        i += 1;
+        continue;
+    }
 
-            while i < chars.len() && chars[i].is_ascii_digit() {
-                num_str.push(chars[i]);
+    b'*' => {
+        tokens.push(Token::Mul);
+        i += 1;
+        continue;
+    }
+
+    b'/' => {
+        tokens.push(Token::Div);
+        i += 1;
+        continue;
+    }
+
+    b')' => {
+        tokens.push(Token::Rparen);
+        i += 1;
+        continue;
+    }
+
+    b'}' => {
+        tokens.push(Token::Rcurly);
+        i += 1;
+        continue;
+    }
+
+    b',' => {
+        tokens.push(Token::Comma);
+        i += 1;
+        continue;
+    }
+
+    b'{' => {
+        tokens.push(Token::Lcurly);
+        i += 1;
+        continue;
+    }
+
+    b'(' => {
+        tokens.push(Token::Lparen);
+        i += 1;
+        continue;
+    }
+
+    _ => {}
+}
+
+        if bytes[i].is_ascii_digit() {
+let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
                 i += 1
             }
-            let num = num_str.parse::<i64>().unwrap();
-            tokens.push(Token::Number(num));
+            let num = code[start .. i].parse::<i64>();
+            tokens.push(Token::Number(num.unwrap()));
             continue;
         }
 
-        if ch == '"' {
-            i += 1;
-            let mut str = String::new();
-            while chars[i] != '"' && i < chars.len() {
-                str.push(chars[i]);
+        if bytes[i] == b'"' {
+           let start = i;
+            while bytes[i] != b'"' && i < bytes.len() {
                 i += 1;
             }
-
-            tokens.push(Token::String(str));
+let text = &code[start..i];
+            tokens.push(Token::String(text));
             i += 1;
 
             continue;
         }
 
-        if ch.is_alphabetic() || ch == '_' && ch != '"' {
-            let mut ident_str = String::new();
-            while i < chars.len() && (chars[i].is_alphabetic() || chars[i] == '_') {
-                ident_str.push(chars[i]);
+        if bytes[i].is_ascii_alphabetic() || bytes[i] == b'_' && bytes[i]!= b'"' {
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_alphabetic() || bytes[i] == b'_') {
                 i += 1;
             }
-
-            match ident_str.as_str() {
+let ident_str = &code[start .. i];
+            match ident_str {
                 "return" => tokens.push(Token::Return),
                 "int" => tokens.push(Token::Int),
                 "str" => tokens.push(Token::Str),
