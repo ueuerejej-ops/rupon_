@@ -1,50 +1,38 @@
-Idea of the language
-The main goal is not just to make another language, but to learn and experiment with compiler design
+# Idea of the Language
 
-Later I want to try ideas like:
+I'm building this language mainly to learn how programming languages and compilers work. The goal isn't to create "just another language", but to experiment with different ideas and understand how everything works under the hood.
 
-different memory management models
+Some of the things I want to explore are:
 
-more control over how data is stored
+Different memory management models
+Custom memory allocators and garbage collectors
+More control over how data is stored and managed
+A flexible language design that's easy to experiment with
 
-flexible language design
+## Project Status
 
-Idea of the language
+The project is still in its early stages and I'm currently working on it alone.
 
-The main goal is not just to make another language, but to learn and experiment with compiler design
+For a while, commits will be less frequent because I'm focusing on the core runtime, including the memory allocator, garbage collector, and other low-level systems. These changes affect a large part of the project, so I'd rather finish them before pushing lots of small commits.
 
-Later I want to try ideas like:
+Everything is still experimental, so the syntax, compiler architecture, and features may change over time.
 
-different memory management models
-more control over how data is stored
-flexible language design
+## Contributing
 
+I'd really appreciate any feedback or help.
 
-This project is still very early in development, and I’m working on it alone right now.
+You can contribute by:
 
-But I would really appreciate help and feedback from other people.
+Sharing ideas for the language
+Improving the parser or LLVM code generation
+Suggesting new language features
+Reviewing the compiler design
+Reporting bugs or giving feedback
 
-If you want to help with the project, you can:
+Even small suggestions are welcome—this project is a learning journey, and every bit of feedback helps.
 
-suggest ideas for the language design
-help improve parsing or LLVM generation
-propose new features for the language
-share feedback about syntax and structure
-Important
+## Contact
 
-Right now the project is not stable, so a lot of things may change in the future
+If you'd like to chat about the project or contribute, feel free to join the Discord server:
 
-Code structure, syntax, and features are still experimental
-
-How to help
-
-If you want to contribute:
-
-open an Issue on GitHub
-or discuss ideas in comments
-or suggest improvements to the compiler design
-
-Even small feedback is helpful because this is a learning project
-
-
-Contact me on Discord: https://discord.gg/XXRqJuJe2k
+**Discord:** https://discord.gg/XXRqJuJe2k
