@@ -1,11 +1,14 @@
 use fxhash::FxHashMap;
-mod parser;
-mod token;
+
 use inkwell::types;
 use inkwell::values::BasicValue;
 use inkwell::values::InstructionValue;
 use inkwell::values::PointerValue;
+mod parser;
+mod arena;
+mod token;
 use parser::Type;
+use parser::Var;
 struct Compiler<'ctx> {
     context: &'ctx Context,
     builder: Builder<'ctx>,
@@ -19,9 +22,9 @@ enum InitValue<'ctx> {
     Int(IntValue<'ctx>),
     Float(FloatValue<'ctx>),
 }
+use crate::arena::Arena;
 use crate::parser::Expr;
 use crate::parser::Stmt;
-use crate::parser::Var;
 use crate::parser::ready_code;
 use core::panic;
 use inkwell::FloatPredicate;
@@ -159,21 +162,18 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    fn create_var<'a>(&mut self, name: &'ctx str, stmt: Stmt<'a>) {
-        match stmt {
-            Stmt::Int(value) => {
+    fn create_var<'a>(&mut self, name: &'ctx str, value: BasicValueEnum<'ctx>) {
                 let i64_type = self.context.i64_type();
 
                 let ptr = self.builder.build_alloca(i64_type, name).unwrap();
-                let value = self.get_value_of_expr(value.expr).unwrap();
+             
                 self.builder.build_store(ptr, value).unwrap();
 
-                let id = self.strint.itern(name);
+                let id = self.strint.itern( name);
 
                 self.variables.save(varaibeldata { ty: Type::Int, ptr }, id);
-            }
-            _ => panic!("jwdwsd"),
-        }
+         
+        
     }
 
     fn get_value_of_expr<'a>(&mut self, expr: Expr<'a>) -> Option<BasicValueEnum<'ctx>> {
@@ -182,12 +182,54 @@ impl<'ctx> Compiler<'ctx> {
                 let int_value = self.context.i64_type().const_int(n as u64, false);
                 Some(int_value.as_basic_value_enum())
             }
+            // Expr::Str(str)=>{
+            //     let pointer = self.builder.build_global_string_ptr(value, name);
+            // }
             _ => panic!("error expr"),
         }
     }
+    fn  read_stmt<'a>(&mut self,var: Var<'a>) where 'a: 'ctx{
+        unsafe{
+          let  expr =  &*var.value;
+   let basicvalue =  self.get_value_of_expr(expr.clone()).unwrap();
+
+   match basicvalue{
+    BasicValueEnum::IntValue(value)=>{
+       self.create_var( var.name, BasicValueEnum::IntValue(value));
+    }
+
+    // BasicValueEnum::PointerValue(str_poiner)=>{
+    //     self.create_var(var.name,BasicValueEnum::PointerValue(str_poiner));
+    // }
+
+    _=>panic!()
+   }
+        }
+
+}
+fn parse_stmt<'a>(&mut self,stmts: Vec<Stmt<'a>>) where 'a : 'ctx{
+  let mut vector:Vec<BasicValueEnum> = Vec::new();
+  for stmt in stmts{
+    match stmt{
+      Stmt::Int(var)=>{
+self.read_stmt(var);
+  
+       }
+    //    Stmt::Str()=>{
+    //     self.read_stmt(var);
+    //    }
+           _ =>  panic!("")
+        
+    }
+  }
+}
+
+
+
 }
 
 fn main() {
+    let mut arena = Arena::new(1000);
     let context = Context::create();
     let mut compiler = Compiler::new(&context, "arm_module");
 
@@ -197,33 +239,16 @@ fn main() {
     let fn_type = context.void_type().fn_type(&[], false);
     let function = compiler.module.add_function("test", fn_type, None);
 
-    let code_my = "func hello(){
-  int i = 0
-}
-  ";
 
-    let mut varaebale = ready_code(code_my);
+    let entry = compiler.context.append_basic_block(function, "entry");
 
-    let entry = context.append_basic_block(function, "entry");
     compiler.builder.position_at_end(entry);
+    let code_my = r#"int he = 32
 
-    let ten = int_type.const_int(10, false);
-    compiler.create_var(
-        "das",
-        Stmt::Int(Var {
-            tipe: Type::Int,
-            name: "hsk",
-            expr: Expr::Num(10),
-        }),
-    );
-    let ten3 = int_type.const_int(13, false);
-
-    let res = compiler.load_var("das");
-
-    compiler.assign_var("das", BasicValueEnum::IntValue(ten3));
+  "#;
+let Stmt = ready_code(&mut arena as *mut Arena ,code_my);
+compiler.parse_stmt(Stmt.clone());
+println!("{:?}",Stmt);
     compiler.module.print_to_stderr();
 }
-
-fn add_var_to_hashmap<'a>(name: &'a str, ty: Type, value: Expr) {}
-
 
