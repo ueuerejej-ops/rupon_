@@ -1,9 +1,9 @@
 use core::panic;
 
-mod token;
-use token::Token;
-use token::tokenize;
-
+use crate::arena::expr_add;
+use crate::token::tokenize;
+use crate::token::Token;
+use crate::arena::Arena;
 #[derive(Debug, Clone)]
 struct Param<'a>{
     name: &'a str,
@@ -11,7 +11,7 @@ struct Param<'a>{
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum Type {
+pub enum Type {
     Int,
     Str,
 }
@@ -31,7 +31,7 @@ pub struct Func<'a> {
 #[derive(Debug, Clone)]
 pub struct Func_call<'a> {
     name: &'a str,
-    args: Vec<Expr<'a>>,
+    args: Vec<*mut Expr<'a>>,
 }
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr<'a>{
@@ -39,49 +39,55 @@ pub enum Expr<'a>{
     Id(&'a str),
     Float(f64),
     Str(&'a str),
+    Binary(*mut Expr<'a>,BinaryOp,*mut Expr<'a>
+    
+    ),
     Comma,
 
-    Binary {
-        left: Box<Expr<'a>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct Binary<'a>{
+
+        left: *mut  Expr<'a>,
         op: BinaryOp,
-        right: Box<Expr<'a>>,
-    },
+        right: *mut Expr<'a>
 }
 #[derive(Debug,Clone)]
 
 pub struct Var<'a>{
-    tipe: Type,
-    value: Expr<'a>,
-    name: &'a str,
+    pub tipe: Type,
+    pub value: *mut Expr<'a>,
+    pub name: &'a str,
 }
 #[derive(Debug, Clone)]
 pub enum Stmt<'a>{
     Int(Var<'a>),
-    Float(& 'a str, Expr<'a>),
-    Str(&'a str,Expr<'a>),
+    Float(& 'a str, &'a Expr<'a>),
+    Str(&'a str,*mut Expr<'a>),
     Var(&'a str),
-    ReturnStmt(Expr<'a>),
+    ReturnStmt(*mut Expr<'a>),
     Func(Func<'a>),
     Func_call(Func_call<'a>),
-    Binary(Expr<'a>),
-    Expr(Expr<'a>),
+    Binary(&'a Expr<'a>),
+    Expr(*mut Expr<'a>),
 }
+#[derive(Debug,Clone)]
 struct Parser<'a>{
+    arena: *mut Arena<'a>,
     tokens: Vec<Token<'a>>,
     pos: usize,
     func_names: Vec<Func<'a>>,
 }
 
+
+
 impl <'a>Parser <'a>{
-    fn new(tokens: Vec<Token<'a>>) -> Self {
-        Parser {
-            tokens,
-            pos: 0,
-            func_names: Vec::new(),
-        }
+    fn new(arena: * mut Arena<'a>,tokens: Vec<Token<'a>>) -> Self {
+Parser { arena: arena ,tokens, pos: 0, func_names: Vec::new() }
     }
 
-    fn current(&self) -> Token<'a> {
+    fn current(& self) -> Token<'a> {
         self.tokens[self.pos]
     }
 
@@ -91,9 +97,10 @@ impl <'a>Parser <'a>{
     tok
 }
 
-    fn previous(&self) -> Token<'a> {
+    fn previous(& self) -> Token<'a> {
         self.tokens[self.pos - 1]
     }
+
     fn parse(&  mut self) -> Vec<Stmt<'a>> {
         let mut statements = Vec::new();
         while self.current() != Token::EOF {
@@ -102,7 +109,36 @@ impl <'a>Parser <'a>{
 
         statements
     }
+      fn next(&mut self) -> Token<'a> {
+        self.tokens[self.pos + 1]
+    }
+  fn parse_statement(&  mut self) -> Stmt<'a>{
+        match self.current() {
+            Token::Int => self.parse_int(),
+            Token::Str => self.parse_str(),
+            Token::Return => self.parse_return(),
+            Token::Func => self.parse_func(),
+            Token::Identifier(name) => {
+                if self.next() == Token::Lparen {
+                    self.parse_func_call()
+                } else {
+                    panic!("sas")
+                }
+            }
 
+            _ => {
+                let expr = self.parse_expr();
+
+unsafe {
+    if let Expr::Str(_) = &*expr {
+        Stmt::Expr( expr)
+    } else {
+        panic!("Expected string");
+    }
+}
+            }
+        }
+    }
     fn parse_return(&mut self) -> Stmt<'a> {
         self.advance();
         let expr = self.parse_primary();
@@ -121,7 +157,7 @@ impl <'a>Parser <'a>{
             panic!("Expected '='");
         }
 
-        let expr = self.chech_expr(Type::Int);
+        let expr = self.check_expr(Type::Int);
 
         Stmt::Int(Var  {
             tipe: Type::Int,
@@ -129,22 +165,23 @@ impl <'a>Parser <'a>{
             name,
         })
     }
-    fn chech_expr(&mut self, tipe: Type) -> Expr<'a> {
-        let expr = self.parse_expr();
-        match (tipe.clone(), expr.clone()) {
+    fn check_expr(&mut self, tipe: Type) -> *mut Expr<'a> {
+    let expr = self.parse_expr();
+
+    unsafe {
+        match (tipe.clone(), &*expr) {
             (Type::Int, Expr::Num(_))
             | (Type::Int, Expr::Id(_))
             | (Type::Int, Expr::Binary { .. })
             | (Type::Str, Expr::Str(_))
-            | (Type::Str, Expr::Id(_)) => {expr},
+            | (Type::Str, Expr::Id(_)) => expr,
 
-           _=> panic!("Cannot put {:?} to {:?}", tipe, expr)
-
+            _ => panic!("Cannot put {:?} to {:?}", tipe.clone(), &*expr),
         }
-     
     }
+}
     fn parse_func_call(&mut self) -> Stmt<'a> {
-        let mut args: Vec<Expr> = Vec::new();
+        let mut argument = Vec::new();
 
         let name = match self.advance().clone() {
             Token::Identifier(name) => name,
@@ -156,10 +193,10 @@ impl <'a>Parser <'a>{
             if self.current() == Token::Comma {
                 self.advance();
             }
-            args.push(self.parse_expr());
+            argument.push(self.parse_expr());
         }
         self.advance();
-        Stmt::Func_call(Func_call { name, args })
+        Stmt::Func_call(Func_call { name, args:argument })
     }
     fn parse_func(&mut self) -> Stmt<'a> {
         self.advance();
@@ -201,7 +238,7 @@ impl <'a>Parser <'a>{
         self.advance();
         code_token.push(Token::EOF);
 
-        let mut parser = Parser::new(code_token.clone());
+        let mut parser = Parser::new(self.arena,code_token.clone());
 
         println!("{:?}", code_token);
         Stmt::Func(Func {
@@ -231,68 +268,44 @@ impl <'a>Parser <'a>{
             panic!("Expected '='");
         }
 
-        let expr = self.parse_primary();
+        let mut expr = self.parse_primary();
+unsafe {
+    if let Expr::Str(_) = &*expr {
+        Stmt::Str(name, expr)
+    } else {
+        panic!("Expected string");
+    }
+}
+    }
 
-        if let Expr::Str(_) = &expr {
-            Stmt::Str(name, expr)
-        } else {
-            panic!("Expected string");
+ fn parse_primary_for_bianry(&mut self) -> *mut Expr<'a> {
+    let token = self.advance();
+
+    match token {
+        Token::Number(val) => {
+            expr_add(self.arena, Expr::Num(val))
         }
-    }
-    fn next(&mut self) -> Token<'a> {
-        self.tokens[self.pos + 1]
-    }
-    fn parse_statement(&  mut self) -> Stmt<'a>{
-        match self.current() {
-            Token::Int => self.parse_int(),
-            Token::Str => self.parse_str(),
-            Token::Return => self.parse_return(),
-            Token::Func => self.parse_func(),
-            Token::Identifier(name) => {
-                if self.next() == Token::Lparen {
-                    self.parse_func_call()
-                } else {
-                    panic!("sas")
-                }
+
+        Token::Identifier(name) => {
+            expr_add(self.arena, Expr::Id(name))
+        }
+
+        Token::Lparen => {
+            let expr = self.parse_expr();
+
+            if self.current() != Token::Rparen {
+                panic!("Expected ')'");
             }
 
-            _ => {
-                let expr = self.parse_expr();
-                Stmt::Expr(expr)
-            }
+            self.advance();
+
+            expr
         }
+
+        _ => panic!("error {:?}", token),
     }
-
-    fn parse_primary(&mut self) -> Expr<'a> {
-        let token = self.advance();
-        match token {
-            Token::Number(val) => Expr::Num(val),
-            Token::Identifier(name) => Expr::Id(name),
-            Token::String(str) => Expr::Str(str),
-            _ => panic!("error{:?}", token),
-        }
-    }
-
-        fn parse_primary_for_bianry(&mut self) -> Expr<'a> {
-        let token = self.advance();
-        match token {
-            Token::Number(val) => Expr::Num(val),
-            Token::Identifier(name) => Expr::Id(name),
-       
-                        Token::Lparen=>{
-                          let expr =  self.parse_expr();
-                            if self.current() != Token::Rparen{
-                                panic!("Expected ')'")
-                            }
-                            self.advance();
-                            expr
-
-
-                        },
-            _ => panic!("error{:?}", token),
-        }
-    }
-    fn parse_expr(&mut self) -> Expr<'a> {
+}
+  fn parse_expr(&mut self) ->*mut Expr<'a>{
         let mut left = self.parse_term();
         while matches!(self.current(), Token::Mines | Token::Add) {
             let op = match self.advance() {
@@ -303,15 +316,13 @@ impl <'a>Parser <'a>{
 
             let right = self.parse_term();
 
-            left = Expr::Binary {
-                left: Box::new(left),
-                op,
-                right: Box::new(right),
-            }
+            let expr = Expr::Binary( left, op, right );
+            left = expr_add(self.arena, expr);
         }
         left
     }
-    fn parse_term(&mut self) -> Expr<'a>{
+        
+    fn parse_term(&mut self) ->*mut Expr<'a>{
         let mut left = self.parse_primary_for_bianry();
 
         while matches!(self.current(), Token::Mul | Token::Div) {
@@ -323,37 +334,49 @@ impl <'a>Parser <'a>{
 
             let right = self.parse_primary_for_bianry();
 
-            left = Expr::Binary {
-                left: Box::new(left),
-                op,
-                right: Box::new(right),
-            };
+       let expr = Expr::Binary(left, op, right);
+       left = expr_add(self.arena, expr);
         }
         left
     }
-    fn back(&mut self) {
-        if self.pos > 0 {
-            self.pos -= 1;
-        }
+    fn parse_primary(& mut self) -> *mut Expr<'a> {
+        let token = self.advance();
+        let   expr= match token {
+            Token::Number(val) => Expr::Num(val),
+            Token::Identifier(name) => Expr::Id(name),
+            Token::String(str) => Expr::Str(str),
+            _ => panic!("error{:?}", token),
+        };
+       expr_add(self.arena, expr)
+    }
+
+    fn fhdf(&mut  self){
+        self.advance();
+        self.previous();
+        self.parse_primary();
+        self.previous();
+        self.parse_primary();
     }
 }
-pub fn ready_code<'a>(code: &'a str) -> Vec<Stmt<'a>> {
+
+pub fn ready_code<'a>(arena: *mut Arena<'a>,code: &'a str)-> Vec<Stmt<'a>>{
+      let tokens = tokenize(code);
+      let mut parser = Parser::new(arena, tokens);
+      parser.parse()
+}
+
+fn main() {
+    let mut arena = Arena::new(2000);
+
+    let code = r#"int i = 10 str hello = "dsd""#;
+
     let tokens = tokenize(code);
 
-    let mut parser = Parser::new(tokens);
-    let ast = parser.parse();
+    let mut parser = Parser::new(
+        &mut arena as *mut Arena,
+        tokens,
+    );
 
-    ast
+    println!("{:?}",parser.parse());
 }
-fn main() {
-    let my_code = r#"1 +1 *2 +2"#;
-    let tokens = tokenize(my_code);
-    println!("{:?}", tokens.clone());
-
-    let mut parser = Parser::new(tokens.clone());
-    let emc = parser.parse();
-    println!("{:?}", emc);
-    println!("{:?}", parser.parse());
-}
-
 
