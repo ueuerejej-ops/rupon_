@@ -1,8 +1,6 @@
 use fxhash::FxHashMap;
 
-use inkwell::types;
 use inkwell::values::BasicValue;
-use inkwell::values::InstructionValue;
 use inkwell::values::PointerValue;
 mod parser;
 mod arena;
@@ -17,30 +15,21 @@ struct Compiler<'ctx> {
     strint: StringInterner<'ctx>,
 }
 
-#[derive(Debug, Clone)]
-enum InitValue<'ctx> {
-    Int(IntValue<'ctx>),
-    Float(FloatValue<'ctx>),
-}
+
 use crate::arena::Arena;
 use crate::parser::Expr;
 use crate::parser::Stmt;
 use crate::parser::ready_code;
 use core::panic;
-use inkwell::FloatPredicate;
-use inkwell::OptimizationLevel;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::values::{
-    BasicMetadataValueEnum, BasicValueEnum, FloatValue, FunctionValue, IntValue,
+   BasicValueEnum, 
 };
-use std::any::Any;
-use std::collections::HashMap;
-use std::env::VarError;
-use std::time::Instant;
+
 #[derive(Debug, Clone)]
-struct varaibeldata<'ctx> {
+struct Varaibeldata<'ctx> {
     ty: Type,
     ptr: PointerValue<'ctx>,
 }
@@ -63,9 +52,9 @@ impl<'a> StringInterner<'a> {
             id
         }
     }
-    fn lookup(&self, name: &'a str) -> &usize {
+    fn lookup(&self, name: &'a str) -> usize {
         if let Some(id) = self.map.get(name) {
-            id
+            *id
         } else {
             panic!("cannot find that name")
         }
@@ -77,7 +66,7 @@ struct StringInterner<'a> {
 }
 
 struct SymbolHash<'ctx> {
-    variebles: FxHashMap<usize, varaibeldata<'ctx>>,
+    variebles: FxHashMap<usize, Varaibeldata<'ctx>>,
 }
 impl<'ctx> SymbolHash<'ctx> {
     fn new() -> Self {
@@ -86,10 +75,10 @@ impl<'ctx> SymbolHash<'ctx> {
         }
     }
 
-    fn save(&mut self, var: varaibeldata<'ctx>, id: usize) {
+    fn save(&mut self, var: Varaibeldata<'ctx>, id: usize) {
         self.variebles.insert(id, var);
     }
-    fn get_var(&self, id: usize) -> Option<&varaibeldata<'ctx>> {
+    fn get_var(&self, id: usize) -> Option<&Varaibeldata<'ctx>> {
         self.variebles.get(&id)
     }
 }
@@ -104,103 +93,104 @@ impl<'ctx> Compiler<'ctx> {
         };
         compiler
     }
-    fn func_call(
-        &self,
-        func: FunctionValue<'ctx>,
-        name: &str,
-        args: Option<Vec<InitValue<'ctx>>>,
-    ) -> Option<Vec<InitValue<'ctx>>> {
-        let mut llvm_args: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
-
-        if let Some(args) = args {
-            for arg in args {
-                match arg {
-                    InitValue::Float(val) => llvm_args.push(val.into()),
-                    InitValue::Int(val) => llvm_args.push(val.into()),
-                }
-            }
-        }
-
-        let call = self.builder.build_call(func, &llvm_args, name).unwrap();
-        if let Some(basic_val) = call.try_as_basic_value().left() {
-            let mut vec_of_return: Vec<InitValue<'ctx>> = Vec::new();
-            if basic_val.is_float_value() {
-                vec_of_return.push(InitValue::Float(basic_val.into_float_value()));
-                Some(vec_of_return)
-            } else if basic_val.is_int_value() {
-                vec_of_return.push(InitValue::Int(basic_val.into_int_value()));
-                Some(vec_of_return)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+    fn get_var(&self,name: &str)->&Varaibeldata<'ctx>{
+        let id = self.strint.lookup(name);
+           self.variables.get_var(id).unwrap()
     }
 
-    fn assign_var(&mut self, name: &'ctx str, val: BasicValueEnum) {
-        let id = self.strint.itern(name);
-        let var = self.variables.get_var(id).unwrap();
+fn get_expr_type(&self, expr: &Expr) -> Type {
+    match expr {
+        Expr::Num(_) => Type::Int,
 
-        self.builder.build_store(var.ptr, val).unwrap();
-    }
-    fn load_var(&mut self, name: &'ctx str) -> InitValue {
-        let id = self.strint.itern(name);
-        let var = self.variables.get_var(id).unwrap();
-
-        match var.ty {
-            Type::Int => {
-                let value = self
-                    .builder
-                    .build_load(self.context.i64_type(), var.ptr, "load_tmp")
-                    .unwrap()
-                    .into_int_value();
-
-                InitValue::Int(value)
-            }
-            _ => panic!(""),
+        Expr::Id(name) => {
+            self.get_var(name).ty.clone()
         }
+
+        Expr::Str(_) => Type::Str,
+
+        _ => panic!("unknown")
     }
+}
+    fn create_var<'a>(&mut self, name: &'ctx str, value: BasicValueEnum<'ctx>, ty: Type) {
+              let ptr =   match ty{
+                  Type::Int=>{
+                    self.builder.build_alloca(self.context.i64_type(), name).unwrap()
+                  }
+                  Type::Str=>{
+                    let ptr_ty = value.into_pointer_value().get_type();
+                    self.builder.build_alloca(ptr_ty, name).unwrap()
+                  }
 
-    fn create_var<'a>(&mut self, name: &'ctx str, value: BasicValueEnum<'ctx>) {
-                let i64_type = self.context.i64_type();
+                  
+                };
+         self.builder.build_store(ptr, value).unwrap();
 
-                let ptr = self.builder.build_alloca(i64_type, name).unwrap();
-             
-                self.builder.build_store(ptr, value).unwrap();
+         let id = self.strint.itern(name);
 
-                let id = self.strint.itern( name);
-
-                self.variables.save(varaibeldata { ty: Type::Int, ptr }, id);
-         
+         self.variables.save(Varaibeldata { ty, ptr }, id);
         
     }
 
     fn get_value_of_expr<'a>(&mut self, expr: Expr<'a>) -> Option<BasicValueEnum<'ctx>> {
         match expr {
+            Expr::Id(name)=>{
+let var = self.get_var(name);
+          match var.ty{
+            Type::Int=>{
+       let value = self.builder.build_load(
+    self.context.i64_type(),
+    var.ptr,
+    "tmp",
+).unwrap();
+
+Some(value)
+            }
+          Type::Str => {
+                    let value = self.builder
+                        .build_load(
+                            var.ptr.get_type(),
+                            var.ptr,
+                            "tmp"
+                        )
+                        .unwrap();
+
+                    Some(value)
+                }
+          }
+
+         
+            }
             Expr::Num(n) => {
                 let int_value = self.context.i64_type().const_int(n as u64, false);
                 Some(int_value.as_basic_value_enum())
             }
-            // Expr::Str(str)=>{
-            //     let pointer = self.builder.build_global_string_ptr(value, name);
-            // }
+            Expr::Str(str)=>{
+                let pointer = self.builder.build_global_string_ptr(str,"DFDF").unwrap();
+
+                Some(pointer.as_basic_value_enum())
+            }
             _ => panic!("error expr"),
         }
     }
     fn  read_stmt<'a>(&mut self,var: Var<'a>) where 'a: 'ctx{
         unsafe{
           let  expr =  &*var.value;
+        let expr_type = self.get_expr_type(expr);
+
+        if var.tipe != expr_type{
+            panic!("error type")
+        }
    let basicvalue =  self.get_value_of_expr(expr.clone()).unwrap();
 
    match basicvalue{
     BasicValueEnum::IntValue(value)=>{
-       self.create_var( var.name, BasicValueEnum::IntValue(value));
+       self.create_var( var.name, BasicValueEnum::IntValue(value),Type::Int);
     }
 
-    // BasicValueEnum::PointerValue(str_poiner)=>{
-    //     self.create_var(var.name,BasicValueEnum::PointerValue(str_poiner));
-    // }
+
+    BasicValueEnum::PointerValue(str_poiner)=>{
+        self.create_var(var.name,BasicValueEnum::PointerValue(str_poiner),Type::Str);
+    }
 
     _=>panic!()
    }
@@ -208,16 +198,14 @@ impl<'ctx> Compiler<'ctx> {
 
 }
 fn parse_stmt<'a>(&mut self,stmts: Vec<Stmt<'a>>) where 'a : 'ctx{
-  let mut vector:Vec<BasicValueEnum> = Vec::new();
   for stmt in stmts{
     match stmt{
-      Stmt::Int(var)=>{
+      Stmt::Int(var)| Stmt::Str(var)=>{
 self.read_stmt(var);
   
        }
-    //    Stmt::Str()=>{
-    //     self.read_stmt(var);
-    //    }
+      
+       
            _ =>  panic!("")
         
     }
@@ -233,8 +221,7 @@ fn main() {
     let context = Context::create();
     let mut compiler = Compiler::new(&context, "arm_module");
 
-    let f64_type = context.f64_type();
-    let int_type = context.i64_type();
+
 
     let fn_type = context.void_type().fn_type(&[], false);
     let function = compiler.module.add_function("test", fn_type, None);
@@ -243,12 +230,12 @@ fn main() {
     let entry = compiler.context.append_basic_block(function, "entry");
 
     compiler.builder.position_at_end(entry);
-    let code_my = r#"int he = 32
+    let code_my = r#"str df = 3 int he = df
 
   "#;
-let Stmt = ready_code(&mut arena as *mut Arena ,code_my);
-compiler.parse_stmt(Stmt.clone());
-println!("{:?}",Stmt);
+let stmt = ready_code(&mut arena as *mut Arena ,code_my);
+compiler.parse_stmt(stmt.clone());
+println!("{:?}",stmt);
     compiler.module.print_to_stderr();
 }
 
