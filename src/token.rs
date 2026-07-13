@@ -1,4 +1,3 @@
-use crate::token;
 #[derive(Debug, PartialEq, Clone, Copy)]
 
 pub enum Token<'src> {
@@ -24,7 +23,7 @@ pub enum Token<'src> {
 
     EOF,
 }
-pub fn tokenize<'src>(code: &str) -> Vec<Token> {
+pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
     let mut tokens: Vec<Token> = Vec::new();
 
     let bytes = code.as_bytes();
