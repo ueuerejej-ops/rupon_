@@ -1,3 +1,4 @@
+#[warn(unused)]
 use core::panic;
 
 use crate::arena::expr_add;
@@ -47,13 +48,8 @@ pub enum Expr<'a>{
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct Binary<'a>{
 
-        left: *mut  Expr<'a>,
-        op: BinaryOp,
-        right: *mut Expr<'a>
-}
-#[derive(Debug,Clone)]
+
 
 pub struct Var<'a>{
     pub tipe: Type,
@@ -64,7 +60,7 @@ pub struct Var<'a>{
 pub enum Stmt<'a>{
     Int(Var<'a>),
     Float(& 'a str, &'a Expr<'a>),
-    Str(&'a str,*mut Expr<'a>),
+    Str(Var<'a>),
     Var(&'a str),
     ReturnStmt(*mut Expr<'a>),
     Func(Func<'a>),
@@ -268,12 +264,16 @@ unsafe {
             panic!("Expected '='");
         }
 
-        let mut expr = self.parse_primary();
+        let expr = self.parse_primary();
 unsafe {
     if let Expr::Str(_) = &*expr {
-        Stmt::Str(name, expr)
+        Stmt::Str(Var { tipe: Type::Str, value: expr, name })
     } else {
-        panic!("Expected string");
+        if let Expr::Id(_) = &*expr{
+            Stmt::Str(Var { tipe: Type::Str, value: expr, name })
+        }else{
+            panic!("exp")
+        }
     }
 }
     }
@@ -350,13 +350,7 @@ unsafe {
        expr_add(self.arena, expr)
     }
 
-    fn fhdf(&mut  self){
-        self.advance();
-        self.previous();
-        self.parse_primary();
-        self.previous();
-        self.parse_primary();
-    }
+  
 }
 
 pub fn ready_code<'a>(arena: *mut Arena<'a>,code: &'a str)-> Vec<Stmt<'a>>{
@@ -365,18 +359,4 @@ pub fn ready_code<'a>(arena: *mut Arena<'a>,code: &'a str)-> Vec<Stmt<'a>>{
       parser.parse()
 }
 
-fn main() {
-    let mut arena = Arena::new(2000);
-
-    let code = r#"int i = 10 str hello = "dsd""#;
-
-    let tokens = tokenize(code);
-
-    let mut parser = Parser::new(
-        &mut arena as *mut Arena,
-        tokens,
-    );
-
-    println!("{:?}",parser.parse());
-}
 
