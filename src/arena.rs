@@ -1,25 +1,24 @@
 use core::panic;
 use std::marker::PhantomData;
-use crate::Expr;
+use crate::parser::Expr;
 use std::{alloc::{Layout, alloc}, env::set_var, ptr::{self, null}};
-  pub struct Arena<'a> {
+  pub struct Arena {
     buffer: *mut u8,
     capacity: usize,
     offset: usize,
     prev_offset: usize,
-   matker: std::marker::PhantomData<Expr<'a>>
 }
 
 
-impl <'a>Arena<'a>{
+impl Arena{
   pub fn new(capacity: usize)->Self{
     let layout = Layout::from_size_align(capacity, 8).unwrap();
     let buffer = unsafe {
         alloc(layout)
     };
-    Self { buffer, capacity, offset: 0, prev_offset: 0, matker: PhantomData }
+    Self { buffer, capacity, offset: 0, prev_offset: 0 }
   }
-    pub fn alloc_expr(& mut self, expr: Expr<'a>) -> *mut Expr<'a> {
+    pub fn alloc_expr<'a>(& mut self, expr: Expr<'a>) -> *mut Expr<'a> {
         self.alloc(expr)
     }
 
@@ -116,13 +115,13 @@ return ptr;
 
 
 }
-pub fn alloc_arena_memeory<'a>(cap: usize)-> Arena<'a> {
+pub fn alloc_arena_memeory<'a>(cap: usize)-> Arena {
     let mut arena = Arena::new(cap);
 
   arena
   
 }
-impl<'a> Drop for Arena<'a> {
+impl<'a> Drop for Arena {
     fn drop(&mut self) {
         let layout = Layout::from_size_align(self.capacity, 8).unwrap();
         unsafe {
@@ -135,14 +134,9 @@ impl<'a> Drop for Arena<'a> {
 
 
 
-fn main(){
-  let mut arena =& mut  Arena::new(200);
- let addres =  expr_add( arena, Expr::Num(2323));
 
- println!("{:?}",addres)
-}
 
-pub fn expr_add<'a>(arena: * mut Arena<'a>,expr: Expr<'a>)->*mut Expr<'a>{
+pub fn expr_add<'a>(arena: * mut Arena,expr: Expr<'a>)->*mut Expr<'a>{
     unsafe {
       (*arena).alloc_expr(expr)
     }
