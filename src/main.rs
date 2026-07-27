@@ -1,68 +1,44 @@
+mod arena;
 mod code_gen;
 mod parser;
 mod token;
-mod arena;
 
-use inkwell::values::BasicValue;
-use inkwell::values::PointerValue;
-use inkwell::values::FunctionValue;
-
-use crate::parser::Type;
-use crate::parser::Func_call;
-use crate::parser::Param;
-use crate::code_gen::Compiler;
-use crate::parser::Var;
-use crate::arena::expr_add;
-use crate::token::tokenize;
-use crate::token::Token;
 use crate::arena::Arena;
+
+use crate::code_gen::{Compiler, run_jit};
 use crate::parser::ready_code;
-use std::task::Waker;
-use crate::parser::Stmt;
-use core::panic;
+use inkwell::AddressSpace;
+
 use inkwell::context::Context;
-use inkwell::builder::Builder;
-use inkwell::module::Module;
-use crate::parser::Expr;
-use inkwell::values::{
-   BasicValueEnum, 
-};
-
-
- fn get_type<'a>(compiler: &Compiler,expr: Expr<'a>)->Type{
-    match expr{
-        Expr::Num(_)=>Type::Int,
-        Expr::Str(_)=>Type::Str,
-        Expr::Id(name)=>{
-         let id = compiler.strint.lookup(name);
-         let var = compiler.variables.get_var(id).unwrap().clone();
-         var.ty
-        } 
-        _=>panic!("e")
-    }
-}
-
-
 
 fn main() {
     let mut arena = Arena::new(1000);
     let context = Context::create();
     let mut compiler = Compiler::new(&context, "arm_module");
 
+    let puts_type = context.i32_type().fn_type(
+        &[context.i8_type().ptr_type(AddressSpace::default()).into()],
+        false,
+    );
 
+    let _ = compiler.module.add_function("puts", puts_type, None);
 
-    let fn_type = context.void_type().fn_type(&[], false);
-    let function = compiler.module.add_function("test", fn_type, None);
+    let code_my = r#"
 
+func add( int a,int b){
+return a+b
 
-    let entry = compiler.context.append_basic_block(function, "entry");
-
-    compiler.builder.position_at_end(entry);
-    let code_my = r#"  int four = 4 int four_two = four four = four_two
-
+}
+func turnten(int i){
+i = 10
+}
+func main(){
+puts("hello world")
+}
   "#;
-let stmt = ready_code(&mut arena as *mut Arena ,code_my,&mut compiler.strint);
-compiler.parse_stmt(stmt.clone());
-println!("{:?}",stmt);
+    let stmt = ready_code(&mut arena, code_my);
+    compiler.parse_stmts(stmt.clone());
     compiler.module.print_to_stderr();
+
+    run_jit(&compiler.module);
 }
