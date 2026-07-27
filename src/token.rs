@@ -1,7 +1,6 @@
 #[derive(Debug, PartialEq, Clone, Copy)]
 
 pub enum Token<'src> {
-    Call,
     Func,
     Return,
     Rparen,
@@ -14,7 +13,6 @@ pub enum Token<'src> {
     Add,
     Mul,
     Div,
-
     Identifier(&'src str),
     Number(i64),
     String(&'src str),
@@ -114,11 +112,11 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
             i += 1;
 
             let start = i;
-            while  i < bytes.len() &&bytes[i] != b'"' {
+            while i < bytes.len() && bytes[i] != b'"' {
                 i += 1;
             }
             let text = &code[start..i];
-            
+
             tokens.push(Token::String(text));
             i += 1;
 
@@ -136,7 +134,6 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
                 "int" => tokens.push(Token::Int),
                 "str" => tokens.push(Token::Str),
                 "func" => tokens.push(Token::Func),
-                "call" => tokens.push(Token::Call),
                 _ => tokens.push(Token::Identifier(ident_str)),
             }
             continue;
