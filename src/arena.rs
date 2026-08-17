@@ -27,7 +27,7 @@ impl<'a> Arena<'a> {
     }
 
     pub fn alloc<T>(&mut self, value: T) -> *mut T {
-        let ptr = self.arena_alloc_align(std::mem::size_of::<T>(), std::mem::align_of::<T>());
+        let ptr = self.arena_alloc_align(size_of::<T>(), align_of::<T>());
 
         unsafe {
             let ptr = ptr as *mut T;
@@ -47,7 +47,7 @@ impl<'a> Arena<'a> {
 
         assert!(align.is_power_of_two());
         if old_memory.is_null() || old_size == 0 {
-            return self.arena_alloc_align(new_size, align);
+            self.arena_alloc_align(new_size, align)
         } else if self.buffer <= old_memory && old_memory < end {
             if unsafe { self.buffer.add(self.prev_offset) == old_memory } {
                 self.offset = self.prev_offset + new_size;
@@ -57,7 +57,7 @@ impl<'a> Arena<'a> {
                         std::ptr::write_bytes(old_memory, 0, new_size);
                     }
                 }
-                return old_memory;
+                old_memory
             } else {
                 let new_ptr = self.arena_alloc_align(new_size, align);
 
@@ -65,7 +65,7 @@ impl<'a> Arena<'a> {
                 unsafe {
                     std::ptr::copy(old_memory, new_ptr, copy_size);
                 }
-                return new_ptr;
+                new_ptr
             }
         } else {
             panic!()
@@ -95,7 +95,7 @@ impl<'a> Arena<'a> {
         let mut offsett = (self.align_forward(curr_ptr, align)) as usize;
         offsett -= self.buffer as usize;
         if offsett + size <= self.capacity {
-            let mut ptr = unsafe { self.buffer.add(offsett) as *mut u8 };
+            let ptr = unsafe { self.buffer.add(offsett) };
             self.prev_offset = offsett;
             self.offset = offsett + size;
 
