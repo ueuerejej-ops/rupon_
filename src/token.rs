@@ -10,15 +10,27 @@ pub enum Token<'src> {
     Comma,
     Assign,
     Mines,
+    Float,
     Add,
     Mul,
+    Loop,
     Div,
     Identifier(&'src str),
     Number(i64),
     String(&'src str),
     Int,
     Str,
-
+    Else,
+    While,
+    And,
+    Break,
+    Or,
+    If,
+    FloatValue(f64),
+    Less,
+    Greater,
+    Equal,
+    NotEqual,
     EOF,
 }
 pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
@@ -36,15 +48,57 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
 
         match bytes[i] {
             b'=' => {
-                tokens.push(Token::Assign);
+                if bytes[i + 1] == b'=' {
+                    tokens.push(Token::Equal);
+                    i += 2;
+                    continue;
+                } else {
+                    tokens.push(Token::Assign);
+                    i += 1;
+                    continue;
+                }
+            }
+
+            b'>' => {
+                tokens.push(Token::Greater);
                 i += 1;
                 continue;
             }
-
+            b'<' => {
+                tokens.push(Token::Less);
+                i += 1;
+                continue;
+            }
             b'+' => {
                 tokens.push(Token::Add);
                 i += 1;
                 continue;
+            }
+
+            b'&' => {
+                if bytes[i + 1] == b'&' {
+                    tokens.push(Token::And);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            b'|' => {
+                if bytes[i + 1] == b'|' {
+                    tokens.push(Token::Or);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            b'!' => {
+                if bytes[i + 1] == b'=' {
+                    tokens.push(Token::NotEqual);
+                    i += 2;
+                    continue;
+                } else {
+                    panic!("dssd")
+                }
             }
 
             b'-' => {
@@ -100,11 +154,25 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
 
         if bytes[i].is_ascii_digit() {
             let start = i;
-            while i < bytes.len() && bytes[i].is_ascii_digit() {
-                i += 1
+            let mut dots = false;
+            while i < bytes.len() {
+                if bytes[i].is_ascii_digit() {
+                    i += 1
+                } else if bytes[i] == b'.' && !dots {
+                    dots = true;
+                    i += 1
+                } else {
+                    break;
+                }
             }
-            let num = code[start..i].parse::<i64>();
-            tokens.push(Token::Number(num.unwrap()));
+            let num_str = &code[start..i];
+            if dots {
+                let num = num_str.parse::<f64>().unwrap();
+                tokens.push(Token::FloatValue(num))
+            } else {
+                let num = num_str.parse::<i64>().unwrap();
+                tokens.push(Token::Number(num))
+            }
             continue;
         }
 
@@ -133,7 +201,13 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
                 "return" => tokens.push(Token::Return),
                 "int" => tokens.push(Token::Int),
                 "str" => tokens.push(Token::Str),
+                "float" => tokens.push(Token::Float),
                 "func" => tokens.push(Token::Func),
+                "if" => tokens.push(Token::If),
+                "while" => tokens.push(Token::While),
+                "else" => tokens.push(Token::Else),
+                "loop" => tokens.push(Token::Loop),
+                "break" => tokens.push(Token::Break),
                 _ => tokens.push(Token::Identifier(ident_str)),
             }
             continue;
