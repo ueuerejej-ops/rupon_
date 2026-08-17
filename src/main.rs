@@ -1,6 +1,9 @@
+extern crate core;
+
 mod arena;
 mod code_gen;
 mod parser;
+mod runtime;
 mod token;
 
 use crate::arena::Arena;
@@ -9,6 +12,7 @@ use crate::code_gen::{Compiler, run_jit};
 use crate::parser::ready_code;
 use inkwell::AddressSpace;
 
+use crate::runtime::Runtime;
 use inkwell::context::Context;
 
 fn main() {
@@ -16,29 +20,40 @@ fn main() {
     let context = Context::create();
     let mut compiler = Compiler::new(&context, "arm_module");
 
-    let puts_type = context.i32_type().fn_type(
-        &[context.i8_type().ptr_type(AddressSpace::default()).into()],
+    let print_type = context.void_type().fn_type(
+        &[
+            context.i8_type().ptr_type(AddressSpace::default()).into(),
+            context.i8_type().ptr_type(AddressSpace::default()).into(),
+        ],
         false,
     );
 
-    let _ = compiler.module.add_function("puts", puts_type, None);
+    let _ = compiler.module.add_function("print", print_type, None);
 
     let code_my = r#"
+       func fs(float num){
 
-func add( int a,int b){
-return a+b
+return num
+   }
+    func main() {
+    int i = 0
+float ie = 23.23
+float in = 32.88
+   while i != 10{
+   i = i+1
+   if i == 8{
+     break
+   }
+   print("ee")
+   }
 
+ float f =   fs(23.333)
 }
-func turnten(int i){
-i = 10
-}
-func main(){
-puts("hello world")
-}
+
   "#;
     let stmt = ready_code(&mut arena, code_my);
-    compiler.parse_stmts(stmt.clone());
+    println!("{:#?}", stmt);
+    compiler.parse_stmts(stmt);
     compiler.module.print_to_stderr();
-
-    run_jit(&compiler.module);
+    run_jit(&compiler.module, &mut Runtime::new());
 }
