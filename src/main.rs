@@ -31,14 +31,15 @@ fn main() {
     let _ = compiler.module.add_function("print", print_type, None);
 
     let code_my = r#"
-       func fs(float num){
-
-return num
+       func fs(int num){
+print("dd")
    }
     func main() {
     int i = 0
 float ie = 23.23
 float in = 32.88
+    float iii  = 67 *2222.222
+
    while i != 10{
    i = i+1
    if i == 8{
@@ -47,7 +48,7 @@ float in = 32.88
    print("ee")
    }
 
- float f =   fs(23.333)
+  fs(23)
 }
 
   "#;
