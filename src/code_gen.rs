@@ -1,7 +1,7 @@
 use fxhash::FxHashMap;
 
 use inkwell::types::BasicMetadataTypeEnum;
-use inkwell::values::{BasicValue, FunctionValue};
+use inkwell::values::{BasicValue, FloatValue, FunctionValue};
 use inkwell::{AddressSpace, IntPredicate};
 
 use inkwell::OptimizationLevel;
@@ -199,8 +199,8 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
         self.builder.position_at_end(start_entry);
         self.string_interner = StringInterner::new();
         self.variables = SymbolHash::new();
-
-        for (i, param) in args.iter().enumerate() {
+        let  mut i = 1;
+        for  param in args.iter() {
             let llvm_param = funcion.get_nth_param(i as u32).unwrap();
             llvm_param.set_name(param.name);
             let id = self.string_interner.itern(param.name);
@@ -216,6 +216,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 },
                 id,
             );
+            i=i+1
         }
         self.current_func = Some(funcion);
 
@@ -297,7 +298,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             }
             Expr::Binary(_, _, _) => {
                 let result = self.binary(expr);
-                Some(BasicValueEnum::IntValue(result))
+                Some(result)
             }
             Expr::Func(func) => Some(self.do_call_expr(func.clone())),
             _ => panic!("error expr"),
@@ -379,21 +380,28 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
         }
     }
 
-    fn binary(&self, expr: Expr) -> IntValue<'ctx> {
+    fn binary(&self, expr: Expr) -> BasicValueEnum<'ctx> {
         match expr {
-            Expr::Num(n) => self.context.i64_type().const_int(n as u64, false),
+            Expr::Num(n) => self.context.i64_type().const_int(n as u64, false).into(),
+            Expr::Float(n) => self.context.f64_type().const_float(n).into(),
 
             Expr::Id(id) => {
                 let id = self.string_interner.lookup(id);
                 let name = self.string_interner.string[id];
                 let var = self.variables.get_var(id).unwrap();
 
-                let value = self
-                    .builder
-                    .build_load(self.context.i64_type(), var.ptr, name)
-                    .unwrap()
-                    .into_int_value();
-                value
+
+                if var.ty == Type::Float {
+                    let fvalue = self.builder.build_load(self.context.f64_type(), var.ptr, name).unwrap().into_float_value();
+                    fvalue.into()
+                } else {
+                    let value = self
+                        .builder
+                        .build_load(self.context.i64_type(), var.ptr, name)
+                        .unwrap()
+                        .into_int_value();
+                    value.into()
+                }
             }
             Expr::Binary(left_raw, op, right_raw) => {
                 let left = unsafe { (*left_raw).clone() };
@@ -403,22 +411,170 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 let right_intv = self.binary(right);
 
                 match op {
-                    BinaryOp::Add => self
-                        .builder
-                        .build_int_add(left_intv, right_intv, "add")
-                        .unwrap(),
-                    BinaryOp::Sub => self
-                        .builder
-                        .build_int_sub(left_intv, right_intv, "sub")
-                        .unwrap(),
-                    BinaryOp::Mul => self
-                        .builder
-                        .build_int_mul(left_intv, right_intv, "mul")
-                        .unwrap(),
-                    BinaryOp::Div => self
-                        .builder
-                        .build_int_unsigned_div(left_intv, right_intv, "div")
-                        .unwrap(),
+                    BinaryOp::Add => match (left_intv, right_intv) {
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
+                            self
+                                .builder
+                                .build_float_add(
+                                    v,
+                                    self.builder
+                                        .build_signed_int_to_float(
+                                            v2,
+                                            self.context.f64_type(),
+                                            "int_to_float",
+                                        )
+                                        .unwrap(),
+                                    "add",
+                                )
+                                .unwrap().into()
+                        },
+
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                            self
+                                .builder
+                                .build_float_add(
+                                    v,
+                                            v2,
+                                    "add"
+                                ).unwrap().into()
+                        }
+
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2))=>{
+                            self.builder.build_int_add(
+                                v,v2 ,"add"
+                            ).unwrap().into()
+                        }
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
+                            self.builder.build_float_add(
+                                self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"add"
+                            ).unwrap().into()
+                        }
+                        _=>panic!()
+                    },
+                    BinaryOp::Sub => {
+                        match (left_intv,right_intv) {
+                            (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
+                                self
+                                    .builder
+                                    .build_float_sub(
+                                        v,
+                                        self.builder
+                                            .build_signed_int_to_float(
+                                                v2,
+                                                self.context.f64_type(),
+                                                "int_to_float",
+                                            )
+                                            .unwrap(),
+                                        "sub",
+                                    )
+                                    .unwrap().into()
+                            },
+
+                            (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                                self
+                                    .builder
+                                    .build_float_sub(
+                                        v,
+                                        v2,
+                                        "sub"
+                                    ).unwrap().into()
+                            }
+                            (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
+                                self.builder.build_float_sub(
+                                    self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"sub"
+                                ).unwrap().into()
+                            }
+                            (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
+                                self.builder.build_int_sub(
+                                    v,v2 ,"sub"
+                                ).unwrap().into()
+                            }
+                            _=>panic!()
+                        }
+                    },
+                    BinaryOp::Mul =>{
+                        match (left_intv,right_intv) {
+                            (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
+                                self
+                                    .builder
+                                    .build_float_mul(
+                                        v,
+                                        self.builder
+                                            .build_signed_int_to_float(
+                                                v2,
+                                                self.context.f64_type(),
+                                                "int_to_float",
+                                            )
+                                            .unwrap(),
+                                        "mul",
+                                    )
+                                    .unwrap().into()
+                            },
+
+                            (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
+                                self.builder.build_float_mul(
+                                    self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"mul"
+                                ).unwrap().into()
+                            }
+                            (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                                self
+                                    .builder
+                                    .build_float_mul(
+                                        v,
+                                        v2,
+                                        "mul"
+                                    ).unwrap().into()
+                            }
+
+                            (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
+                                self.builder.build_int_mul(
+                                    v,v2 ,"mul"
+                                ).unwrap().into()
+                            }
+                            _=>panic!()
+                        }
+                    },
+                    BinaryOp::Div => {
+                        match (left_intv,right_intv) {
+                            (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
+                                self
+                                    .builder
+                                    .build_float_div(
+                                        v,
+                                        self.builder
+                                            .build_signed_int_to_float(
+                                                v2,
+                                                self.context.f64_type(),
+                                                "int_to_float",
+                                            )
+                                            .unwrap(),
+                                        "div",
+                                    )
+                                    .unwrap().into()
+                            },
+                            (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
+                                self.builder.build_float_div(
+                                    self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"div"
+                                ).unwrap().into()
+                            }
+                            (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                                self
+                                    .builder
+                                    .build_float_div(
+                                        v,
+                                        v2,
+                                        "div"
+                                    ).unwrap().into()
+                            }
+
+                            (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
+                                self.builder.build_int_unsigned_div(
+                                    v,v2 ,"div"
+                                ).unwrap().into()
+                            }
+                            _=>panic!()
+                        }
+                    },
                 }
             }
 
