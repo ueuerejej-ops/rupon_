@@ -31,26 +31,33 @@ fn main() {
     let _ = compiler.module.add_function("print", print_type, None);
 
     let code_my = r#"
-       func fs(int num){
-print("dd")
-   }
-    func main() {
+func main() {
     int i = 0
-float ie = 23.23
-float in = 32.88
-    float iii  = 67 *2222.222
-
-   while i != 10{
-   i = i+1
-   if i == 8{
-     break
-   }
-   print("ee")
-   }
-
-  fs(23)
+if 423.3 == 23.4{
+print("dont work")
+}else{
+print("work")
 }
+if 32 == 32.00000000001{
+print("dont work")
+}else{
+print("work")
+}
+    while i != 10 {
+        i = i + 1
 
+        if i == 2 {
+            continue
+        }
+
+
+        if i == 4 {
+            continue
+        }
+
+        print("ee")
+    }
+}
   "#;
     let stmt = ready_code(&mut arena, code_my);
     println!("{:#?}", stmt);
