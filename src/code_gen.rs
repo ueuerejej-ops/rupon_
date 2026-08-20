@@ -1,8 +1,8 @@
 use fxhash::FxHashMap;
 
 use inkwell::types::BasicMetadataTypeEnum;
-use inkwell::values::{BasicValue, FloatValue, FunctionValue};
-use inkwell::{AddressSpace, IntPredicate};
+use inkwell::values::{BasicValue, FunctionValue};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
 use inkwell::OptimizationLevel;
 use inkwell::values::IntValue;
@@ -24,6 +24,7 @@ pub struct Compiler<'ctx, 'src> {
     pub string_interner: StringInterner<'src>,
     pub current_func: Option<FunctionValue<'ctx>>,
     pub break_target: Vec<BasicBlock<'ctx>>,
+    pub continue_target: Vec<BasicBlock<'ctx>>,
 }
 
 use crate::parser::Condition;
@@ -107,6 +108,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             string_interner: StringInterner::new(),
             current_func: None,
             break_target: vec![],
+            continue_target: vec![],
         };
         compiler
     }
@@ -199,8 +201,8 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
         self.builder.position_at_end(start_entry);
         self.string_interner = StringInterner::new();
         self.variables = SymbolHash::new();
-        let  mut i = 1;
-        for  param in args.iter() {
+        let mut i = 1;
+        for param in args.iter() {
             let llvm_param = funcion.get_nth_param(i as u32).unwrap();
             llvm_param.set_name(param.name);
             let id = self.string_interner.itern(param.name);
@@ -216,7 +218,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 },
                 id,
             );
-            i=i+1
+            i = i + 1
         }
         self.current_func = Some(funcion);
 
@@ -390,9 +392,12 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 let name = self.string_interner.string[id];
                 let var = self.variables.get_var(id).unwrap();
 
-
                 if var.ty == Type::Float {
-                    let fvalue = self.builder.build_load(self.context.f64_type(), var.ptr, name).unwrap().into_float_value();
+                    let fvalue = self
+                        .builder
+                        .build_load(self.context.f64_type(), var.ptr, name)
+                        .unwrap()
+                        .into_float_value();
                     fvalue.into()
                 } else {
                     let value = self
@@ -412,168 +417,168 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
 
                 match op {
                     BinaryOp::Add => match (left_intv, right_intv) {
-                        (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
-                            self
-                                .builder
-                                .build_float_add(
-                                    v,
-                                    self.builder
-                                        .build_signed_int_to_float(
-                                            v2,
-                                            self.context.f64_type(),
-                                            "int_to_float",
-                                        )
-                                        .unwrap(),
-                                    "add",
-                                )
-                                .unwrap().into()
-                        },
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => self
+                            .builder
+                            .build_float_add(
+                                v,
+                                self.builder
+                                    .build_signed_int_to_float(
+                                        v2,
+                                        self.context.f64_type(),
+                                        "int_to_float",
+                                    )
+                                    .unwrap(),
+                                "add",
+                            )
+                            .unwrap()
+                            .into(),
 
                         (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
-                            self
-                                .builder
-                                .build_float_add(
-                                    v,
-                                            v2,
-                                    "add"
-                                ).unwrap().into()
+                            self.builder.build_float_add(v, v2, "add").unwrap().into()
                         }
 
-                        (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2))=>{
-                            self.builder.build_int_add(
-                                v,v2 ,"add"
-                            ).unwrap().into()
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
+                            self.builder.build_int_add(v, v2, "add").unwrap().into()
                         }
-                        (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
-                            self.builder.build_float_add(
-                                self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"add"
-                            ).unwrap().into()
-                        }
-                        _=>panic!()
-                    },
-                    BinaryOp::Sub => {
-                        match (left_intv,right_intv) {
-                            (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
-                                self
-                                    .builder
-                                    .build_float_sub(
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2)) => self
+                            .builder
+                            .build_float_add(
+                                self.builder
+                                    .build_signed_int_to_float(
                                         v,
-                                        self.builder
-                                            .build_signed_int_to_float(
-                                                v2,
-                                                self.context.f64_type(),
-                                                "int_to_float",
-                                            )
-                                            .unwrap(),
-                                        "sub",
+                                        self.context.f64_type(),
+                                        "int to float",
                                     )
-                                    .unwrap().into()
-                            },
-
-                            (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
-                                self
-                                    .builder
-                                    .build_float_sub(
-                                        v,
-                                        v2,
-                                        "sub"
-                                    ).unwrap().into()
-                            }
-                            (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
-                                self.builder.build_float_sub(
-                                    self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"sub"
-                                ).unwrap().into()
-                            }
-                            (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
-                                self.builder.build_int_sub(
-                                    v,v2 ,"sub"
-                                ).unwrap().into()
-                            }
-                            _=>panic!()
-                        }
+                                    .unwrap(),
+                                v2,
+                                "add",
+                            )
+                            .unwrap()
+                            .into(),
+                        _ => panic!(),
                     },
-                    BinaryOp::Mul =>{
-                        match (left_intv,right_intv) {
-                            (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
-                                self
-                                    .builder
-                                    .build_float_mul(
-                                        v,
-                                        self.builder
-                                            .build_signed_int_to_float(
-                                                v2,
-                                                self.context.f64_type(),
-                                                "int_to_float",
-                                            )
-                                            .unwrap(),
-                                        "mul",
-                                    )
-                                    .unwrap().into()
-                            },
-
-                            (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
-                                self.builder.build_float_mul(
-                                    self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"mul"
-                                ).unwrap().into()
-                            }
-                            (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
-                                self
-                                    .builder
-                                    .build_float_mul(
-                                        v,
+                    BinaryOp::Sub => match (left_intv, right_intv) {
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => self
+                            .builder
+                            .build_float_sub(
+                                v,
+                                self.builder
+                                    .build_signed_int_to_float(
                                         v2,
-                                        "mul"
-                                    ).unwrap().into()
-                            }
+                                        self.context.f64_type(),
+                                        "int_to_float",
+                                    )
+                                    .unwrap(),
+                                "sub",
+                            )
+                            .unwrap()
+                            .into(),
 
-                            (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
-                                self.builder.build_int_mul(
-                                    v,v2 ,"mul"
-                                ).unwrap().into()
-                            }
-                            _=>panic!()
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                            self.builder.build_float_sub(v, v2, "sub").unwrap().into()
                         }
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2)) => self
+                            .builder
+                            .build_float_sub(
+                                self.builder
+                                    .build_signed_int_to_float(
+                                        v,
+                                        self.context.f64_type(),
+                                        "int to float",
+                                    )
+                                    .unwrap(),
+                                v2,
+                                "sub",
+                            )
+                            .unwrap()
+                            .into(),
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
+                            self.builder.build_int_sub(v, v2, "sub").unwrap().into()
+                        }
+                        _ => panic!(),
                     },
-                    BinaryOp::Div => {
-                        match (left_intv,right_intv) {
-                            (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => {
-                                self
-                                    .builder
-                                    .build_float_div(
-                                        v,
-                                        self.builder
-                                            .build_signed_int_to_float(
-                                                v2,
-                                                self.context.f64_type(),
-                                                "int_to_float",
-                                            )
-                                            .unwrap(),
-                                        "div",
-                                    )
-                                    .unwrap().into()
-                            },
-                            (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2))=>{
-                                self.builder.build_float_div(
-                                    self.builder.build_signed_int_to_float(v,self.context.f64_type(),"int to float").unwrap() , v2,"div"
-                                ).unwrap().into()
-                            }
-                            (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
-                                self
-                                    .builder
-                                    .build_float_div(
-                                        v,
+                    BinaryOp::Mul => match (left_intv, right_intv) {
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => self
+                            .builder
+                            .build_float_mul(
+                                v,
+                                self.builder
+                                    .build_signed_int_to_float(
                                         v2,
-                                        "div"
-                                    ).unwrap().into()
-                            }
+                                        self.context.f64_type(),
+                                        "int_to_float",
+                                    )
+                                    .unwrap(),
+                                "mul",
+                            )
+                            .unwrap()
+                            .into(),
 
-                            (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
-                                self.builder.build_int_unsigned_div(
-                                    v,v2 ,"div"
-                                ).unwrap().into()
-                            }
-                            _=>panic!()
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2)) => self
+                            .builder
+                            .build_float_mul(
+                                self.builder
+                                    .build_signed_int_to_float(
+                                        v,
+                                        self.context.f64_type(),
+                                        "int to float",
+                                    )
+                                    .unwrap(),
+                                v2,
+                                "mul",
+                            )
+                            .unwrap()
+                            .into(),
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                            self.builder.build_float_mul(v, v2, "mul").unwrap().into()
                         }
+
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => {
+                            self.builder.build_int_mul(v, v2, "mul").unwrap().into()
+                        }
+                        _ => panic!(),
+                    },
+                    BinaryOp::Div => match (left_intv, right_intv) {
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::IntValue(v2)) => self
+                            .builder
+                            .build_float_div(
+                                v,
+                                self.builder
+                                    .build_signed_int_to_float(
+                                        v2,
+                                        self.context.f64_type(),
+                                        "int_to_float",
+                                    )
+                                    .unwrap(),
+                                "div",
+                            )
+                            .unwrap()
+                            .into(),
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::FloatValue(v2)) => self
+                            .builder
+                            .build_float_div(
+                                self.builder
+                                    .build_signed_int_to_float(
+                                        v,
+                                        self.context.f64_type(),
+                                        "int to float",
+                                    )
+                                    .unwrap(),
+                                v2,
+                                "div",
+                            )
+                            .unwrap()
+                            .into(),
+                        (BasicValueEnum::FloatValue(v), BasicValueEnum::FloatValue(v2)) => {
+                            self.builder.build_float_div(v, v2, "div").unwrap().into()
+                        }
+
+                        (BasicValueEnum::IntValue(v), BasicValueEnum::IntValue(v2)) => self
+                            .builder
+                            .build_int_unsigned_div(v, v2, "div")
+                            .unwrap()
+                            .into(),
+                        _ => panic!(),
                     },
                 }
             }
@@ -583,7 +588,6 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
     }
 
     fn compile_cond(&self, cond: Condition<'src>) -> IntValue<'ctx> {
-        println!("{:?}ds", cond.clone());
         match cond {
             Condition::Compare { left, op, right } => self.compile_comp(left, op, right),
             Condition::And(left_raw, right_raw) => {
@@ -609,32 +613,222 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
     fn compile_comp(&self, left: *mut Expr, op: CompareOp, right: *mut Expr) -> IntValue<'ctx> {
         let left_expr = unsafe { &*left };
         let right_expr = unsafe { &*right };
-        let left_value = self
-            .get_value_of_expr(left_expr.clone())
-            .unwrap()
-            .into_int_value();
-        let right_value = self
-            .get_value_of_expr(right_expr.clone())
-            .unwrap()
-            .into_int_value();
-        match op {
-            CompareOp::Equal => self
-                .builder
-                .build_int_compare(IntPredicate::EQ, left_value, right_value, "eq")
-                .unwrap(),
-            CompareOp::NotEqual => self
-                .builder
-                .build_int_compare(IntPredicate::NE, left_value, right_value, "ne")
-                .unwrap(),
-            CompareOp::Less => self
-                .builder
-                .build_int_compare(IntPredicate::SLT, left_value, right_value, "less")
-                .unwrap(),
+        let left_value = self.get_value_of_expr(left_expr.clone()).unwrap();
 
-            CompareOp::Greater => self
-                .builder
-                .build_int_compare(IntPredicate::SGT, left_value, right_value, "greater")
-                .unwrap(),
+        let right_value = self.get_value_of_expr(right_expr.clone()).unwrap();
+        match op {
+            CompareOp::Equal => {
+                if left_value.is_float_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OEQ,
+                            left_value.into_float_value(),
+                            right_value.into_float_value(),
+                            "eq",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_int_compare(
+                            IntPredicate::EQ,
+                            left_value.into_int_value(),
+                            right_value.into_int_value(),
+                            "eq",
+                        )
+                        .unwrap()
+                } else if left_value.is_float_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OEQ,
+                            left_value.into_float_value(),
+                            self.builder
+                                .build_signed_int_to_float(
+                                    right_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            "eq",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OEQ,
+                            self.builder
+                                .build_signed_int_to_float(
+                                    left_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            right_value.into_float_value(),
+                            "eq",
+                        )
+                        .unwrap()
+                } else {
+                    panic!()
+                }
+            }
+            CompareOp::NotEqual => {
+                if left_value.is_float_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::ONE,
+                            left_value.into_float_value(),
+                            right_value.into_float_value(),
+                            "ne",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_int_compare(
+                            IntPredicate::NE,
+                            left_value.into_int_value(),
+                            right_value.into_int_value(),
+                            "ne",
+                        )
+                        .unwrap()
+                } else if left_value.is_float_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::ONE,
+                            left_value.into_float_value(),
+                            self.builder
+                                .build_signed_int_to_float(
+                                    right_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            "ne",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::ONE,
+                            self.builder
+                                .build_signed_int_to_float(
+                                    left_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            right_value.into_float_value(),
+                            "ne",
+                        )
+                        .unwrap()
+                } else {
+                    panic!()
+                }
+            }
+            CompareOp::Less => {
+                if left_value.is_float_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OGT,
+                            left_value.into_float_value(),
+                            right_value.into_float_value(),
+                            "less",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_int_compare(
+                            IntPredicate::SLT,
+                            left_value.into_int_value(),
+                            right_value.into_int_value(),
+                            "less",
+                        )
+                        .unwrap()
+                } else if left_value.is_float_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OLT,
+                            left_value.into_float_value(),
+                            self.builder
+                                .build_signed_int_to_float(
+                                    right_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            "less",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OLT,
+                            self.builder
+                                .build_signed_int_to_float(
+                                    left_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            right_value.into_float_value(),
+                            "less",
+                        )
+                        .unwrap()
+                } else {
+                    panic!()
+                }
+            }
+            CompareOp::Greater => {
+                if left_value.is_float_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OGT,
+                            left_value.into_float_value(),
+                            right_value.into_float_value(),
+                            "great",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_int_compare(
+                            IntPredicate::SGT,
+                            left_value.into_int_value(),
+                            right_value.into_int_value(),
+                            "great",
+                        )
+                        .unwrap()
+                } else if left_value.is_float_value() && right_value.is_int_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OGT,
+                            left_value.into_float_value(),
+                            self.builder
+                                .build_signed_int_to_float(
+                                    right_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            "great",
+                        )
+                        .unwrap()
+                } else if left_value.is_int_value() && right_value.is_float_value() {
+                    self.builder
+                        .build_float_compare(
+                            FloatPredicate::OGT,
+                            self.builder
+                                .build_signed_int_to_float(
+                                    left_value.into_int_value(),
+                                    self.context.f64_type(),
+                                    "int_to_float",
+                                )
+                                .unwrap(),
+                            right_value.into_float_value(),
+                            "great",
+                        )
+                        .unwrap()
+                } else {
+                    panic!()
+                }
+            }
         }
     }
 
@@ -652,10 +846,28 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 .unwrap();
             self.builder.position_at_end(block_then);
             self.parse_stmts(if_block.code);
-            self.builder.build_unconditional_branch(block_end).unwrap();
-
+            if self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_terminator()
+                .is_none()
+            {
+                self.builder.build_unconditional_branch(block_end).unwrap();
+            }
             self.builder.position_at_end(block_else);
+
             self.parse_stmts(else_code);
+            if self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_terminator()
+                .is_none()
+            {
+                self.builder.build_unconditional_branch(block_end).unwrap();
+            }
+            self.builder.position_at_end(block_end);
         } else {
             let block_then = self.context.append_basic_block(func, "if_then");
             let block_end = self.context.append_basic_block(func, "if_end");
@@ -710,6 +922,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
 
         self.break_target.push(while_end);
 
+        self.continue_target.push(while_cond);
         self.parse_stmts(while_block.code);
 
         if self
@@ -724,6 +937,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
 
         self.break_target.pop();
 
+        self.continue_target.pop();
         self.builder.position_at_end(while_end);
     }
     fn do_break(&mut self) {
@@ -731,6 +945,13 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
 
         self.builder
             .build_unconditional_branch(while_end.clone())
+            .unwrap();
+    }
+    fn do_continue(&mut self) {
+        let while_cond = self.continue_target.last().unwrap();
+
+        self.builder
+            .build_unconditional_branch(while_cond.clone())
             .unwrap();
     }
     pub fn parse_stmt(&mut self, stmt: Stmt<'src>) {
@@ -754,6 +975,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             Stmt::ReturnStmt(value) => {
                 self.do_return(value);
             }
+            Stmt::Continue => self.do_continue(),
         }
     }
 }
