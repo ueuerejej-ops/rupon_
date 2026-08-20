@@ -24,6 +24,7 @@ pub enum Token<'src> {
     While,
     And,
     Break,
+    Continue,
     Or,
     If,
     FloatValue(f64),
@@ -97,7 +98,7 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
                     i += 2;
                     continue;
                 } else {
-                    panic!("dssd")
+                    panic!("expected '='")
                 }
             }
 
@@ -205,6 +206,7 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
                 "func" => tokens.push(Token::Func),
                 "if" => tokens.push(Token::If),
                 "while" => tokens.push(Token::While),
+                "continue" => tokens.push(Token::Continue),
                 "else" => tokens.push(Token::Else),
                 "loop" => tokens.push(Token::Loop),
                 "break" => tokens.push(Token::Break),
