@@ -113,6 +113,7 @@ pub enum Stmt<'a> {
     Funcall(Funcall<'a>),
     Main(Func<'a>),
     If(IfBlock<'a>),
+    Continue,
     Break,
 }
 #[derive(Debug, PartialEq)]
@@ -131,8 +132,10 @@ impl<'src> Vars<'src> {
     }
 
     fn save(&mut self, var: Var<'src>) {
-        if !self.vars.iter().any(|v| v.clone() == var) {
+        if !self.vars.iter().any(|v| v.clone().name == var.name) {
             self.vars.push(var);
+        }else{
+            panic!("error: variable `i` is already declared")
         }
     }
     fn lookup_by_name(&mut self, name: &'src str) -> Var<'src> {
@@ -322,6 +325,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             code.push(Token::EOF);
             let mut parser = Parser::new(self.arena, code);
             parser.current_local = self.current_local.clone();
+            parser.in_while = self.in_while;
             parser.funcs = self.funcs.clone();
             let stmts = parser.parse_for_func();
             contain_else = Option::Some(stmts);
@@ -453,10 +457,16 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             panic!("you can only call break in while")
         }
         self.advance();
-        if self.current() != Token::EOF {
-            panic!("cannot continue code after break")
-        };
+
         Stmt::Break
+    }
+    fn do_continue(&mut self) -> Stmt<'src> {
+        if self.in_while != true {
+            panic!("you can only call Continue in while")
+        }
+        self.advance();
+
+        Stmt::Continue
     }
     fn parse_stmt_for_func(&mut self) -> Stmt<'src> {
         match self.current() {
@@ -464,6 +474,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             Token::Str => self.parse_str(),
             Token::Float => self.parse_float(),
             Token::Return => self.parse_return(),
+            Token::Continue => self.do_continue(),
             Token::Func => self.parse_func(),
             Token::If => self.parse_if(),
             Token::While => self.parse_while(),
@@ -605,7 +616,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                 }
 
                 _ => {
-                    panic!("invalid type{:?}{:?}", expr, tipe)
+                    panic!("invalid type{:?}{:?}", &*expr, tipe)
                 }
             }
         }
