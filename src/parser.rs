@@ -631,8 +631,24 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                         panic!("inviled type")
                     }
                 }
-                (Type::Char, Expr::Char(_)) => expr,
 
+                (Type::Char, Expr::Func(func)) => {
+                    let func = self.funcs.iter().find(|f| f.name == func.name);
+                    if func.unwrap().ty == Some(FunType::Char) {
+                        expr
+                    } else {
+                        panic!("inviled type")
+                    }
+                }
+                (Type::Char, Expr::Char(_)) => expr,
+                (Type::Char,Expr::Id(name))=>{
+                    let var = self.current_local.lookup_by_name(name);
+                    if var.tipe == Type::Char {
+                        expr
+                    } else {
+                        panic!("invalid type")
+                    }
+                }
                 (Type::Str, Expr::Func(func)) => {
                     let func = self.funcs.iter().find(|f| f.name == func.name);
                     if func.unwrap().ty == Some(FunType::Str) {
@@ -789,6 +805,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                     returnv = Some((*(*value)).clone());
                     return_type = match returnv {
                         Some(Expr::Num(_)) => Some(FunType::Int),
+                        Some(Expr::Char(_)) => Some(FunType::Char),
                         Some(Expr::Str(_)) => Some(FunType::Str),
                         Some(Expr::Binary(_, _, _)) => Some(FunType::Int),
                         Some(Expr::Func(ref func)) => {
