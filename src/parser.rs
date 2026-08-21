@@ -8,6 +8,7 @@ use crate::token::tokenize;
 pub enum FunType {
     Str,
     Int,
+    Char,
     Float,
 }
 
@@ -20,6 +21,7 @@ pub struct Param<'a> {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Int,
+    Char,
     Float,
     Str,
 }
@@ -48,6 +50,7 @@ pub struct Funcall<'a> {
 pub enum Expr<'a> {
     Num(i64),
     Float(f64),
+    Char(char),
     Id(&'a str),
     Str(&'a str),
     Func(Funcall<'a>),
@@ -103,7 +106,7 @@ pub struct Var<'src> {
 pub enum Stmt<'a> {
     Assign { name: &'a str, value: *mut Expr<'a> },
     Int(Var<'a>),
-
+    Char(Var<'a>),
     Float(Var<'a>),
     Str(Var<'a>),
     While(WhileBlock<'a>),
@@ -134,7 +137,7 @@ impl<'src> Vars<'src> {
     fn save(&mut self, var: Var<'src>) {
         if !self.vars.iter().any(|v| v.clone().name == var.name) {
             self.vars.push(var);
-        }else{
+        } else {
             panic!("error: variable `i` is already declared")
         }
     }
@@ -471,6 +474,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
     fn parse_stmt_for_func(&mut self) -> Stmt<'src> {
         match self.current() {
             Token::Int => self.parse_int(),
+            Token::Char => self.parse_char(),
             Token::Str => self.parse_str(),
             Token::Float => self.parse_float(),
             Token::Return => self.parse_return(),
@@ -503,6 +507,27 @@ impl<'src, 'arena> Parser<'src, 'arena> {
         self.advance();
         let expr = self.parse_expr();
         Stmt::ReturnStmt(expr)
+    }
+    fn parse_char(&mut self) -> Stmt<'src> {
+        self.advance();
+        let name = match self.advance() {
+            Token::Identifier(name) => name,
+            _ => panic!("expected name"),
+        };
+
+        if self.advance() != Token::Assign {
+            panic!("expected '='")
+        }
+        let expr = self.check_expr(Type::Char);
+
+        let var = Var {
+            tipe: Type::Char,
+            value: expr,
+            name,
+        };
+
+        self.current_local.save(var.clone());
+        Stmt::Char(var)
     }
     fn parse_float(&mut self) -> Stmt<'src> {
         self.advance();
@@ -606,6 +631,8 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                         panic!("inviled type")
                     }
                 }
+                (Type::Char, Expr::Char(_)) => expr,
+
                 (Type::Str, Expr::Func(func)) => {
                     let func = self.funcs.iter().find(|f| f.name == func.name);
                     if func.unwrap().ty == Some(FunType::Str) {
@@ -771,6 +798,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                         Some(Expr::Id(name)) => {
                             let var = parser.current_local.lookup_by_name(name);
                             match var.tipe {
+                                Type::Char => Some(FunType::Char),
                                 Type::Int => Some(FunType::Int),
                                 Float => Some(FunType::Float),
                                 Type::Str => Some(FunType::Str),
@@ -853,7 +881,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
 
         match token {
             Token::Number(val) => expr_add(self.arena, Expr::Num(val)),
-
+            Token::CharValue(val) => expr_add(self.arena, Expr::Char(val)),
             Token::FloatValue(val) => expr_add(self.arena, Expr::Float(val)),
             Token::Identifier(name) => {
                 if self.current() == Token::Lparen {
