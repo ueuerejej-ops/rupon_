@@ -31,8 +31,14 @@ fn main() {
     let _ = compiler.module.add_function("print", print_type, None);
 
     let code_my = r#"
+    func char_s(){
+    return 's'
+    }
 func main() {
     int i = 0
+    char hel = 'd'
+    char dv = hel
+    char res = char_s()
 if 423.3 == 23.4{
 print("dont work")
 }else{
