@@ -127,6 +127,10 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 let ptr_ty = value.into_pointer_value().get_type();
                 self.builder.build_alloca(ptr_ty, name).unwrap()
             }
+            Type::Char => self
+                .builder
+                .build_alloca(self.context.i8_type(), name)
+                .unwrap(),
             Type::Float => self
                 .builder
                 .build_alloca(self.context.f64_type(), name)
@@ -142,6 +146,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
     fn param_to_basic_meta_data(&self, arg: Param) -> BasicMetadataTypeEnum<'ctx> {
         match arg.ty {
             Type::Int => self.context.i64_type().into(),
+            Type::Char => self.context.i8_type().into(),
             Type::Float => self.context.f64_type().into(),
             Type::Str => self
                 .context
@@ -184,6 +189,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
         } else {
             fn_type = match &func.ty.unwrap() {
                 FunType::Int => self.context.i64_type().fn_type(&params, false),
+                FunType::Char => self.context.i8_type().fn_type(&params, false),
                 FunType::Str => {
                     let str_ty = self.context.i8_type().ptr_type(AddressSpace::default());
                     str_ty.fn_type(&params, false)
@@ -255,6 +261,14 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                             .unwrap();
                         Some(value)
                     }
+                    Type::Char => {
+                        let value = self
+                            .builder
+                            .build_load(self.context.i8_type(), var.ptr, "tmp")
+                            .unwrap();
+                        Some(value)
+                    }
+
                     Type::Str => {
                         let value = self
                             .builder
@@ -275,6 +289,10 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             }
             Expr::Num(n) => {
                 let int_value = self.context.i64_type().const_int(n.clone() as u64, false);
+                Some(int_value.as_basic_value_enum())
+            }
+            Expr::Char(c) => {
+                let int_value = self.context.i8_type().const_int(c.clone() as u64, false);
                 Some(int_value.as_basic_value_enum())
             }
             Expr::Str(str) => {
@@ -326,9 +344,15 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             let basicvalue = self.get_value_of_expr(expr.clone()).unwrap();
 
             match basicvalue {
-                BasicValueEnum::IntValue(value) => {
-                    self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Int);
-                }
+                BasicValueEnum::IntValue(value) => match var.tipe {
+                    Type::Int => {
+                        self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Int)
+                    }
+                    Type::Char => {
+                        self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Char)
+                    }
+                    _ => panic!(),
+                },
                 BasicValueEnum::FloatValue(value) => {
                     self.create_var(var.name, BasicValueEnum::FloatValue(value), Type::Float);
                 }
@@ -956,7 +980,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
     }
     pub fn parse_stmt(&mut self, stmt: Stmt<'src>) {
         match stmt {
-            Stmt::Int(var) | Stmt::Str(var) | Stmt::Float(var) => {
+            Stmt::Int(var) | Stmt::Str(var) | Stmt::Float(var) | Stmt::Char(var) => {
                 self.read_stmt(var);
             }
             Stmt::Main(func) => {
