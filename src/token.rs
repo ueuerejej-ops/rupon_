@@ -12,6 +12,7 @@ pub enum Token<'src> {
     Mines,
     Float,
     Add,
+    Char,
     Mul,
     Loop,
     Div,
@@ -19,6 +20,7 @@ pub enum Token<'src> {
     Number(i64),
     String(&'src str),
     Int,
+    CharValue(char),
     Str,
     Else,
     While,
@@ -177,6 +179,19 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
             continue;
         }
 
+        if bytes[i] == b'\'' {
+            if !bytes[i + 1].is_ascii_digit() && !bytes[i + 1].is_ascii_alphabetic() {
+                panic!("expected char")
+            }
+            if bytes[i + 2] != b'\'' {
+                panic!("Expected '")
+            }
+            let char = bytes[i + 1] as char;
+            tokens.push(Token::CharValue(char));
+
+            i += 3;
+            continue;
+        }
         if bytes[i] == b'"' {
             i += 1;
 
@@ -210,6 +225,7 @@ pub fn tokenize<'src>(code: &'src str) -> Vec<Token<'src>> {
                 "else" => tokens.push(Token::Else),
                 "loop" => tokens.push(Token::Loop),
                 "break" => tokens.push(Token::Break),
+                "char" => tokens.push(Token::Char),
                 _ => tokens.push(Token::Identifier(ident_str)),
             }
             continue;
