@@ -4,9 +4,8 @@ use std::process::Command;
 // its real stdout output, exactly as a user running the program would see it.
 // No internal functions are called and no project source files are touched.
 //
-// Covers the current hardcoded sample program in main.rs, which exercises
-// while / if / break / float. See PR description for manual verification
-// notes (including the matching LLVM IR check).
+// Covers the current sample program in main.rs, which exercises
+// if / else / float comparisons / while / continue.
 
 #[test]
 fn compiler_runs_sample_program_with_expected_control_flow() {
@@ -23,20 +22,25 @@ fn compiler_runs_sample_program_with_expected_control_flow() {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let printed_lines: Vec<&str> = stdout
+        .lines()
+        .filter(|line| *line == "work" || *line == "ee")
+        .collect();
 
-    // The loop increments i from 1 to 8, and breaks the moment i == 8
-    // *before* the print("ee") call, so exactly 7 "ee" prints are expected.
-    let ee_count = stdout.lines().filter(|line| *line == "ee").count();
+    // Two float comparisons (423.3 == 23.4, and 32 == 32.00000000001) are
+    // both false, so both if/else blocks should print "work", in order,
+    // before the loop runs.
     assert_eq!(
-        ee_count, 7,
-        "expected exactly 7 'ee' prints (break should fire on i == 8 before the print), got {ee_count}"
+        &printed_lines[0..2],
+        &["work", "work"],
+        "expected both float comparisons to print 'work' (comparisons should be false)"
     );
 
-    // fs(23) runs after the loop and should print "dd" as the final output line.
-    let last_line = stdout.lines().rev().find(|line| !line.is_empty());
+    // The loop counts i from 1 to 10, using `continue` (not break) to skip
+    // the print on i == 2 and i == 4, so exactly 8 "ee" prints are expected.
+    let ee_count = printed_lines.iter().filter(|line| **line == "ee").count();
     assert_eq!(
-        last_line,
-        Some("dd"),
-        "expected the final printed line to be 'dd' from the fs() call"
+        ee_count, 8,
+        "expected exactly 8 'ee' prints (continue should skip the print on i == 2 and i == 4, not exit the loop), got {ee_count}"
     );
 }
