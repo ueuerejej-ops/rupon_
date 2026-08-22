@@ -33,6 +33,6 @@ Even small suggestions are welcome—this project is a learning journey, and eve
 
 ## Contact
 
-If you'd like to chat about the project or contribute, feel free to join the Discord server:
+If you'd like to chat about the project or contribute, feel free to join the Discord:
 
 **Discord:** procto_top
