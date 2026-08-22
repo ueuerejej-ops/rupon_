@@ -35,4 +35,4 @@ Even small suggestions are welcome—this project is a learning journey, and eve
 
 If you'd like to chat about the project or contribute, feel free to join the Discord server:
 
-**Discord:** https://discord.gg/XXRqJuJe2k
+**Discord:** procto_top
