@@ -8,7 +8,6 @@ use inkwell::OptimizationLevel;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 
-use crate::parser::FunType;
 use crate::parser::Func;
 use crate::parser::Funcall;
 use crate::parser::Param;
@@ -16,6 +15,7 @@ use crate::parser::Type;
 use crate::parser::Var;
 use crate::parser::{BinaryOp, IfBlock};
 use crate::parser::{CompareOp, WhileBlock};
+use crate::parser::{FunType, LogicalOp};
 pub struct Compiler<'ctx, 'src> {
     pub context: &'ctx Context,
     pub builder: Builder<'ctx>,
@@ -30,7 +30,7 @@ pub struct Compiler<'ctx, 'src> {
 use crate::parser::Condition;
 use crate::parser::Expr;
 use crate::parser::Stmt;
-use crate::runtime::{Runtime, runtime_print};
+use crate::runtime::{Runtime, runtime_compare_str, runtime_print};
 use core::panic;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -127,6 +127,11 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 let ptr_ty = value.into_pointer_value().get_type();
                 self.builder.build_alloca(ptr_ty, name).unwrap()
             }
+            Type::Bool => self
+                .builder
+                .build_alloca(self.context.bool_type(), name)
+                .unwrap(),
+
             Type::Char => self
                 .builder
                 .build_alloca(self.context.i8_type(), name)
@@ -146,6 +151,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
     fn param_to_basic_meta_data(&self, arg: Param) -> BasicMetadataTypeEnum<'ctx> {
         match arg.ty {
             Type::Int => self.context.i64_type().into(),
+            Type::Bool => self.context.bool_type().into(),
             Type::Char => self.context.i8_type().into(),
             Type::Float => self.context.f64_type().into(),
             Type::Str => self
@@ -190,6 +196,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             fn_type = match &func.ty.unwrap() {
                 FunType::Int => self.context.i64_type().fn_type(&params, false),
                 FunType::Char => self.context.i8_type().fn_type(&params, false),
+                FunType::Bool => self.context.bool_type().fn_type(&params, false),
                 FunType::Str => {
                     let str_ty = self.context.i8_type().ptr_type(AddressSpace::default());
                     str_ty.fn_type(&params, false)
@@ -254,6 +261,14 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
 
                         Some(value)
                     }
+                    Type::Bool => {
+                        let value = self
+                            .builder
+                            .build_load(self.context.bool_type(), var.ptr, "tmp")
+                            .unwrap();
+                        Some(value)
+                    }
+
                     Type::Float => {
                         let value = self
                             .builder
@@ -321,6 +336,17 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                 Some(result)
             }
             Expr::Func(func) => Some(self.do_call_expr(func.clone())),
+
+            Expr::Bool(bool) => {
+                if bool.clone() {
+                    let basic = self.context.bool_type().const_int(1, false).into();
+                    Some(basic)
+                } else {
+                    let basic = self.context.bool_type().const_zero().into();
+                    Some(basic)
+                }
+            }
+
             _ => panic!("error expr"),
         }
     }
@@ -349,7 +375,11 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                         self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Int)
                     }
                     Type::Char => {
-                        self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Char)
+                        self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Bool)
+                    }
+
+                    Type::Bool => {
+                        self.create_var(var.name, BasicValueEnum::IntValue(value), Type::Bool)
                     }
                     _ => panic!(),
                 },
@@ -611,29 +641,79 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
         }
     }
 
-    fn compile_cond(&self, cond: Condition<'src>) -> IntValue<'ctx> {
-        match cond {
-            Condition::Compare { left, op, right } => self.compile_comp(left, op, right),
-            Condition::And(left_raw, right_raw) => {
-                let rightv = unsafe { &*right_raw }.clone();
-                let leftv = unsafe { &*left_raw }.clone();
+    fn compile_one(&self, expr_raw: *mut Expr) -> IntValue<'ctx> {
+        let expr = unsafe { &*(expr_raw) };
 
-                self.do_and(self.compile_cond(leftv), self.compile_cond(rightv))
+        match expr {
+            Expr::Bool(bool) => {
+                if bool.clone() {
+                    self.context.bool_type().const_int(1, false)
+                } else {
+                    self.context.bool_type().const_zero()
+                }
             }
-            Condition::Or(left_raw, right_raw) => {
-                let rightv = unsafe { &*right_raw }.clone();
-                let leftv = unsafe { &*left_raw }.clone();
 
-                self.do_or(self.compile_cond(leftv), self.compile_cond(rightv))
+            Expr::Num(n) => {
+                if n.clone() == 0 {
+                    self.context.bool_type().const_zero()
+                } else {
+                    self.context.bool_type().const_int(1, false)
+                }
+            }
+            Expr::Binary(_, _, _) => {
+                let num = self.binary(expr.clone()).into_int_value();
+                if num.get_zero_extended_constant().unwrap() == 0 {
+                    self.context.bool_type().const_zero()
+                } else {
+                    self.context.bool_type().const_int(1, false)
+                }
+            }
+            Expr::Id(name) => {
+                let id = self.string_interner.lookup(name);
+                let var = self.variables.get_var(id).unwrap();
+                match var.ty {
+                    Type::Bool => self
+                        .builder
+                        .build_load(self.context.bool_type(), var.ptr, "tmp")
+                        .unwrap()
+                        .into_int_value(),
+                    _ => self.context.bool_type().const_int(1, false),
+                }
+            }
+            Expr::Func(func) => self.do_call_expr(func.clone()).into_int_value(),
+            _ => panic!(),
+        }
+    }
+
+    fn compile_cond(&self, cond: Condition<'src>) -> IntValue<'ctx> {
+        match cond.clone() {
+            Condition::Compare { left, op, right } => self.compile_comp(left, op, right),
+            Condition::OnlyOne(left) => self.compile_one(left),
+            Condition::LogicalCompare { left, op, right } => {
+                let leftv = unsafe { &(*left) };
+                let rightv = unsafe { &(*right) };
+                match op {
+                    LogicalOp::Or => self
+                        .builder
+                        .build_or(
+                            self.compile_cond(leftv.clone()),
+                            self.compile_cond(rightv.clone()),
+                            "or",
+                        )
+                        .unwrap(),
+                    LogicalOp::And => self
+                        .builder
+                        .build_and(
+                            self.compile_cond(leftv.clone()),
+                            self.compile_cond(rightv.clone()),
+                            "and",
+                        )
+                        .unwrap(),
+                }
             }
         }
     }
-    fn do_and(&self, left: IntValue<'ctx>, right: IntValue<'ctx>) -> IntValue<'ctx> {
-        self.builder.build_and(left, right, "and").unwrap()
-    }
-    fn do_or(&self, left: IntValue<'ctx>, right: IntValue<'ctx>) -> IntValue<'ctx> {
-        self.builder.build_or(left, right, "or").unwrap()
-    }
+
     fn compile_comp(&self, left: *mut Expr, op: CompareOp, right: *mut Expr) -> IntValue<'ctx> {
         let left_expr = unsafe { &*left };
         let right_expr = unsafe { &*right };
@@ -690,6 +770,23 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
                             "eq",
                         )
                         .unwrap()
+                } else if left_value.is_pointer_value() && right_value.is_pointer_value() {
+                    let func = self.module.get_function("str_cmp").unwrap();
+                    let runtime = self.get_runtime();
+                    self.builder
+                        .build_call(
+                            func,
+                            &[
+                                runtime.into(),
+                                left_value.into_pointer_value().into(),
+                                right_value.into_pointer_value().into(),
+                            ],
+                            "str_cmp",
+                        )
+                        .unwrap()
+                        .try_as_basic_value()
+                        .unwrap_left()
+                        .into_int_value()
                 } else {
                     panic!()
                 }
@@ -923,6 +1020,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             self.parse_stmt(stmt);
         }
     }
+
     fn do_while(&mut self, while_block: WhileBlock<'src>) {
         let func = self.current_func.unwrap();
 
@@ -980,7 +1078,11 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
     }
     pub fn parse_stmt(&mut self, stmt: Stmt<'src>) {
         match stmt {
-            Stmt::Int(var) | Stmt::Str(var) | Stmt::Float(var) | Stmt::Char(var) => {
+            Stmt::Int(var)
+            | Stmt::Str(var)
+            | Stmt::Float(var)
+            | Stmt::Char(var)
+            | Stmt::Bool(var) => {
                 self.read_stmt(var);
             }
             Stmt::Main(func) => {
@@ -999,6 +1101,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             Stmt::ReturnStmt(value) => {
                 self.do_return(value);
             }
+
             Stmt::Continue => self.do_continue(),
         }
     }
@@ -1010,8 +1113,9 @@ pub fn run_jit<'ctx>(module: &Module<'ctx>, runtime: &mut Runtime) {
 
     let print = module.get_function("print").unwrap();
 
+    let str_comp = module.get_function("str_cmp").unwrap();
     execution_engine.add_global_mapping(&print, runtime_print as usize);
-
+    execution_engine.add_global_mapping(&str_comp, runtime_compare_str as usize);
     type MainFunc = unsafe extern "C" fn(*mut Runtime);
 
     let addr = execution_engine.get_function_address("main").unwrap();
