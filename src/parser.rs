@@ -8,6 +8,7 @@ use crate::token::tokenize;
 pub enum FunType {
     Str,
     Int,
+    Bool,
     Char,
     Float,
 }
@@ -22,6 +23,7 @@ pub struct Param<'a> {
 pub enum Type {
     Int,
     Char,
+    Bool,
     Float,
     Str,
 }
@@ -52,6 +54,7 @@ pub enum Expr<'a> {
     Float(f64),
     Char(char),
     Id(&'a str),
+    Bool(bool),
     Str(&'a str),
     Func(Funcall<'a>),
     None(Option<*mut Expr<'a>>),
@@ -77,7 +80,11 @@ pub enum CompareOp {
     Equal,
     NotEqual,
 }
-
+#[derive(Debug, PartialEq, Clone)]
+pub enum LogicalOp {
+    And,
+    Or,
+}
 #[derive(Debug, PartialEq, Clone)]
 pub enum Condition<'a> {
     Compare {
@@ -86,9 +93,12 @@ pub enum Condition<'a> {
         right: *mut Expr<'a>,
     },
 
-    And(*mut Condition<'a>, *mut Condition<'a>),
-
-    Or(*mut Condition<'a>, *mut Condition<'a>),
+    LogicalCompare {
+        left: *mut Condition<'a>,
+        op: LogicalOp,
+        right: *mut Condition<'a>,
+    },
+    OnlyOne(*mut Expr<'a>),
 }
 #[derive(Debug, PartialEq, Clone)]
 
@@ -110,7 +120,7 @@ pub enum Stmt<'a> {
     Float(Var<'a>),
     Str(Var<'a>),
     While(WhileBlock<'a>),
-
+    Bool(Var<'a>),
     ReturnStmt(*mut Expr<'a>),
     Func(Func<'a>),
     Funcall(Funcall<'a>),
@@ -331,7 +341,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             parser.in_while = self.in_while;
             parser.funcs = self.funcs.clone();
             let stmts = parser.parse_for_func();
-            contain_else = Option::Some(stmts);
+            contain_else = Some(stmts);
         }
 
         code.push(Token::EOF);
@@ -360,22 +370,58 @@ impl<'src, 'arena> Parser<'src, 'arena> {
         }
     }
 
-    fn parse_cond(&mut self) -> Condition<'src> {
+    fn parse_cond_atom(&mut self) -> Condition<'src> {
         let left = self.parse_expr();
 
-        let op = match self.current() {
-            Token::Equal => CompareOp::Equal,
-            Token::NotEqual => CompareOp::NotEqual,
-            Token::Less => CompareOp::Less,
-            Token::Greater => CompareOp::Greater,
+        match self.current() {
+            Token::Equal => {
+                self.advance();
+                let right = self.parse_expr();
+
+                Condition::Compare {
+                    left,
+                    op: CompareOp::Equal,
+                    right,
+                }
+            }
+
+            Token::NotEqual => {
+                self.advance();
+                let right = self.parse_expr();
+
+                Condition::Compare {
+                    left,
+                    op: CompareOp::NotEqual,
+                    right,
+                }
+            }
+
+            Token::Less => {
+                self.advance();
+                let right = self.parse_expr();
+
+                Condition::Compare {
+                    left,
+                    op: CompareOp::Less,
+                    right,
+                }
+            }
+
+            Token::Greater => {
+                self.advance();
+                let right = self.parse_expr();
+
+                Condition::Compare {
+                    left,
+                    op: CompareOp::Greater,
+                    right,
+                }
+            }
+
+            Token::Lcurly | Token::Or | Token::And => Condition::OnlyOne(left),
 
             token => panic!("EXPECTED CONDITION OPERATOR, GOT {:?}", token),
-        };
-        self.advance();
-
-        let right = self.parse_expr();
-
-        Condition::Compare { left, op, right }
+        }
     }
 
     fn parse_or(&mut self) -> Condition<'src> {
@@ -387,7 +433,15 @@ impl<'src, 'arena> Parser<'src, 'arena> {
 
                 let right = self.parse_or();
 
-                Condition::Or(self.arena.alloc(left), self.arena.alloc(right))
+                let right_raw = self.arena.alloc(right.clone());
+                let left_raw = self.arena.alloc(left.clone());
+                println!("{:?}right", right.clone());
+                println!("{:?}left", left.clone());
+                Condition::LogicalCompare {
+                    left: left_raw,
+                    op: LogicalOp::Or,
+                    right: right_raw,
+                }
             }
 
             _ => left,
@@ -395,7 +449,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
     }
 
     fn parse_and(&mut self) -> Condition<'src> {
-        let left = self.parse_cond();
+        let left = self.parse_cond_atom();
 
         match self.current() {
             Token::And => {
@@ -403,7 +457,15 @@ impl<'src, 'arena> Parser<'src, 'arena> {
 
                 let right = self.parse_and();
 
-                Condition::And(self.arena.alloc(left), self.arena.alloc(right))
+                println!("{:?}right", right.clone());
+                println!("{:?}left", left.clone());
+                let right_raw = self.arena.alloc(right);
+                let left_raw = self.arena.alloc(left);
+                Condition::LogicalCompare {
+                    left: left_raw,
+                    op: LogicalOp::And,
+                    right: right_raw,
+                }
             }
 
             _ => left,
@@ -476,6 +538,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             Token::Int => self.parse_int(),
             Token::Char => self.parse_char(),
             Token::Str => self.parse_str(),
+            Token::Bool => self.parse_bool(),
             Token::Float => self.parse_float(),
             Token::Return => self.parse_return(),
             Token::Continue => self.do_continue(),
@@ -554,6 +617,31 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             name,
         })
     }
+    fn parse_bool(&mut self) -> Stmt<'src> {
+        self.advance();
+
+        let name = match self.advance().clone() {
+            Token::Identifier(name) => name,
+            _ => panic!("Expected identifier"),
+        };
+
+        if self.advance() != Token::Assign {
+            panic!("Expected '='");
+        }
+
+        let expr = self.check_expr(Type::Bool);
+
+        self.current_local.save(Var {
+            tipe: Type::Bool,
+            value: expr,
+            name,
+        });
+        Stmt::Bool(Var {
+            tipe: Type::Bool,
+            value: expr,
+            name,
+        })
+    }
     fn parse_int(&mut self) -> Stmt<'src> {
         self.advance();
 
@@ -586,6 +674,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
         unsafe {
             match (tipe.clone(), &*expr) {
                 (Type::Int, Expr::Num(_)) => expr,
+                (Type::Bool, Expr::Bool(_)) => expr,
                 (Float, Expr::Float(_)) => expr,
                 (Float, Expr::Id(name)) => {
                     let var = self.current_local.lookup_by_name(name);
@@ -595,6 +684,24 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                         panic!("invaild type")
                     }
                 }
+                (Type::Bool, Expr::Id(name)) => {
+                    let var = self.current_local.lookup_by_name(name);
+
+                    if var.tipe == Type::Bool {
+                        expr
+                    } else {
+                        panic!("invalid type")
+                    }
+                }
+                (Type::Bool, Expr::Func(func)) => {
+                    let func = self.funcs.iter().find(|f| f.name == func.name).unwrap();
+                    if func.ty == Some(FunType::Bool) {
+                        expr
+                    } else {
+                        panic!("invaild type")
+                    }
+                }
+
                 (Type::Int, Expr::Id(name)) => {
                     let var = self.current_local.lookup_by_name(name);
                     if var.tipe == Type::Int {
@@ -641,7 +748,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                     }
                 }
                 (Type::Char, Expr::Char(_)) => expr,
-                (Type::Char,Expr::Id(name))=>{
+                (Type::Char, Expr::Id(name)) => {
                     let var = self.current_local.lookup_by_name(name);
                     if var.tipe == Type::Char {
                         expr
@@ -806,6 +913,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                     return_type = match returnv {
                         Some(Expr::Num(_)) => Some(FunType::Int),
                         Some(Expr::Char(_)) => Some(FunType::Char),
+                        Some(Expr::Bool(_)) => Some(FunType::Bool),
                         Some(Expr::Str(_)) => Some(FunType::Str),
                         Some(Expr::Binary(_, _, _)) => Some(FunType::Int),
                         Some(Expr::Func(ref func)) => {
@@ -817,6 +925,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                             match var.tipe {
                                 Type::Char => Some(FunType::Char),
                                 Type::Int => Some(FunType::Int),
+                                Type::Bool => Some(FunType::Bool),
                                 Float => Some(FunType::Float),
                                 Type::Str => Some(FunType::Str),
                             }
@@ -898,6 +1007,8 @@ impl<'src, 'arena> Parser<'src, 'arena> {
 
         match token {
             Token::Number(val) => expr_add(self.arena, Expr::Num(val)),
+            Token::False => expr_add(self.arena, Expr::Bool(false)),
+            Token::True => expr_add(self.arena, Expr::Bool(true)),
             Token::CharValue(val) => expr_add(self.arena, Expr::Char(val)),
             Token::FloatValue(val) => expr_add(self.arena, Expr::Float(val)),
             Token::Identifier(name) => {
@@ -964,6 +1075,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
     fn get_type_out_expr(&mut self, expr: Expr<'src>) -> Type {
         match expr {
             Expr::Num(_) => Type::Int,
+            Expr::Bool(_) => Type::Bool,
             Expr::Str(_) => Type::Str,
             Expr::Binary(_, _, _) => Type::Int,
             Expr::Float(_) => Float,
@@ -991,6 +1103,23 @@ pub fn ready_code<'src, 'a, 'arena>(
         code: vec![],
         name: "print",
         ty: None,
+        returnv: None,
+        locals: Vars { vars: vec![] },
+    });
+    parser.funcs.push(Func {
+        args: vec![
+            Param {
+                name: "string1",
+                ty: Type::Str,
+            },
+            Param {
+                name: "string2",
+                ty: Type::Str,
+            },
+        ],
+        code: vec![],
+        name: "str_cmp",
+        ty: Some(FunType::Bool),
         returnv: None,
         locals: Vars { vars: vec![] },
     });
