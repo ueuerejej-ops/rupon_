@@ -8,7 +8,6 @@ use inkwell::OptimizationLevel;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 
-use crate::parser::Func;
 use crate::parser::Funcall;
 use crate::parser::Param;
 use crate::parser::Type;
@@ -16,6 +15,7 @@ use crate::parser::Var;
 use crate::parser::{BinaryOp, IfBlock};
 use crate::parser::{CompareOp, WhileBlock};
 use crate::parser::{FunType, LogicalOp};
+use crate::parser::{Func, Loop};
 pub struct Compiler<'ctx, 'src> {
     pub context: &'ctx Context,
     pub builder: Builder<'ctx>,
@@ -1020,7 +1020,33 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             self.parse_stmt(stmt);
         }
     }
+    fn do_loop(&mut self, loop_code: Loop<'src>) {
+        let func = self.current_func.unwrap();
 
+        let loop_start = self.context.append_basic_block(func, "loop_start");
+        let loop_end = self.context.append_basic_block(func, "end");
+
+        self.builder.build_unconditional_branch(loop_start).unwrap();
+
+        self.builder.position_at_end(loop_start);
+        self.continue_target.push(loop_start);
+
+        self.break_target.push(loop_end);
+        self.parse_stmts(loop_code.code);
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder.build_unconditional_branch(loop_start).unwrap();
+        }
+
+        self.break_target.pop();
+        self.continue_target.pop();
+        self.builder.position_at_end(loop_end);
+    }
     fn do_while(&mut self, while_block: WhileBlock<'src>) {
         let func = self.current_func.unwrap();
 
@@ -1095,6 +1121,7 @@ impl<'ctx, 'src> Compiler<'ctx, 'src> {
             Stmt::Assign { name, value } => {
                 self.assign_var(name, value.clone());
             }
+            Stmt::Loop(loop_code) => self.do_loop(loop_code),
             Stmt::Break => self.do_break(),
             Stmt::While(while_block) => self.do_while(while_block),
             Stmt::Funcall(call) => self.do_call(call),
