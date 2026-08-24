@@ -42,26 +42,23 @@ fn main() {
         .add_function("str_cmp", compare_str_type, None);
     let code_my = r#"
 func main() {
-bool b = true
+    int i = 0
 
-if 'j' == 'j'{
-print("sd")
-}
-if true{
-print("sd")
-}
-int i = 0
-while true{
-i = i+1
+    loop {
+        i = i + 1
 
-print("dsd")
-if i == 3{
-  break
-}
-}
-if "as" == "as"{
-print("sd")
-}
+        if i == 3 {
+            continue
+        }
+
+        if i == 7 {
+            break
+        }
+
+        print("A")
+    }
+
+    print("END")
 }
   "#;
     let stmt = ready_code(&mut arena, code_my);
