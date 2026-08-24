@@ -112,11 +112,17 @@ pub struct Var<'src> {
     pub name: &'src str,
 }
 #[derive(Debug, Clone, PartialEq)]
+pub struct Loop<'src> {
+    pub locals: Vars<'src>,
+    pub code: Vec<Stmt<'src>>,
+}
+#[derive(Debug, Clone, PartialEq)]
 
 pub enum Stmt<'a> {
     Assign { name: &'a str, value: *mut Expr<'a> },
     Int(Var<'a>),
     Char(Var<'a>),
+    Loop(Loop<'a>),
     Float(Var<'a>),
     Str(Var<'a>),
     While(WhileBlock<'a>),
@@ -545,6 +551,7 @@ impl<'src, 'arena> Parser<'src, 'arena> {
             Token::Func => self.parse_func(),
             Token::If => self.parse_if(),
             Token::While => self.parse_while(),
+            Token::Loop => self.parse_loop(),
             Token::Break => self.do_break(),
             Token::Identifier(name) => {
                 if self.next() == Token::Lparen {
@@ -565,6 +572,50 @@ impl<'src, 'arena> Parser<'src, 'arena> {
                 panic!("Expected string");
             }
         }
+    }
+    fn parse_loop(&mut self) -> Stmt<'src> {
+        self.advance();
+
+        if self.advance() != Token::Lcurly {
+            panic!("expected lcurly")
+        }
+
+        let mut tokens = Vec::new();
+        let mut depth = 0;
+
+        loop {
+            match self.current() {
+                Token::Rcurly => {
+                    if depth == 0 {
+                        self.advance();
+                        break;
+                    }
+                    depth -= 1;
+                    tokens.push(self.current());
+                    self.advance();
+                }
+                Token::Lcurly => {
+                    depth += 1;
+                    tokens.push(self.current());
+                    self.advance();
+                }
+                _ => {
+                    tokens.push(self.current());
+                    self.advance();
+                }
+            }
+        }
+
+        tokens.push(Token::EOF);
+        let mut parser = Parser::new(self.arena, tokens);
+        parser.current_local = self.current_local.clone();
+        parser.funcs = self.funcs.clone();
+        parser.in_while = true;
+        let stmts = parser.parse_for_func();
+        Stmt::Loop(Loop {
+            locals: parser.current_local,
+            code: stmts,
+        })
     }
     fn parse_return(&mut self) -> Stmt<'src> {
         self.advance();
