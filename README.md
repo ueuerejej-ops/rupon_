@@ -1,38 +1,18 @@
-# Idea of the Language
-
-I'm building this language mainly to learn how programming languages and compilers work. The goal isn't to create "just another language", but to experiment with different ideas and understand how everything works under the hood.
-
-Some of the things I want to explore are:
-
-Different memory management models
-Custom memory allocators and garbage collectors
-More control over how data is stored and managed
-A flexible language design that's easy to experiment with
-
+## Idea of the Language
+I'm building this language mainly as a way to learn how programming languages, compilers, and low-level systems work.
+The original goal was to experiment with different ideas and understand how everything works under the hood. Over time, the project has grown quite a lot, and I've already learned and implemented many of the things I originally wanted to explore.
+At this point, the project is mostly an experimental and educational project. I don't plan to develop it as actively as before, so updates may become less frequent.
+The language is still unfinished, and its design may continue to change if I experiment with new ideas.
 ## Project Status
-
-The project is still in its early stages and I'm currently working on it alone.
-
-For a while, commits will be less frequent because I'm focusing on the core runtime, including the memory allocator, garbage collector, and other low-level systems. These changes affect a large part of the project, so I'd rather finish them before pushing lots of small commits.
-
-Everything is still experimental, so the syntax, compiler architecture, and features may change over time.
-
+The project is currently in an experimental state.
+I've already implemented a significant part of the language and compiler, and the main purpose of the project has been achieved for me: learning how programming languages and compilers work internally.
+Because of that, I won't be updating the project as frequently as before. I may still add features, fix bugs, experiment with the architecture, or work on the runtime when I have time.
 ## Contributing
-
-I'd really appreciate any feedback or help.
-
-You can contribute by:
-
-Sharing ideas for the language
-Improving the parser or LLVM code generation
-Suggesting new language features
-Reviewing the compiler design
-Reporting bugs or giving feedback
-
-Even small suggestions are welcome—this project is a learning journey, and every bit of feedback helps.
-
+Even though I won't be developing the project as actively, I'd still really appreciate any help or feedback.
+You don't need to make a huge contribution. Even a small suggestion, improvement, or discussion can be useful.
+If you'd like to contribute, feel free to open an issue or make a pull request.
+This project started as a way for me to learn, and it has already taught me a lot. Now I'd like to keep it open for anyone who wants to experiment with it or help improve it.
 ## Contact
-
-If you'd like to chat about the project or contribute, feel free to join the Discord:
+If you'd like to discuss the project or contribute, feel free to join the Discord:
 
 **Discord:** procto_top
