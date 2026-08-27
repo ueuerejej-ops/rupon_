@@ -1,4 +1,3 @@
-use libc::CS;
 use std::ffi::CStr;
 use std::io::{self, Write};
 
